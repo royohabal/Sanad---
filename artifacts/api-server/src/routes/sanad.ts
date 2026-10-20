@@ -477,6 +477,7 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
       slug: workersTable.slug,
       name: workersTable.name,
       status: workersTable.status,
+      isDemo: workersTable.isDemo,
     })
     .from(workersTable)
     .where(eq(workersTable.slug, body.data.workerSlug))
@@ -541,9 +542,12 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
     const liveAccountNeedsSetup =
       error instanceof StripePaymentError &&
       error.code === "live_charges_disabled";
+    const currencyUnsupported =
+      error instanceof StripePaymentError &&
+      error.code === "unsupported_currency";
     await db
       .update(tipsTable)
-      .set({ status: "failed" })
+      .set({ status: "failed", isDemo: worker.isDemo })
       .where(and(eq(tipsTable.id, tip.id), eq(tipsTable.status, "pending")));
     logger.error(
       {
@@ -552,9 +556,11 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
       },
       "Could not create SANAD Stripe checkout",
     );
-    res.status(liveAccountNeedsSetup ? 503 : 502).json({
+    res.status(liveAccountNeedsSetup ? 503 : currencyUnsupported ? 422 : 502).json({
       error: liveAccountNeedsSetup
         ? "Live Stripe payments are not enabled for this account. No payment was made."
+        : currencyUnsupported
+          ? "This Stripe account cannot accept KWD yet. Add a KWD bank account in Stripe settings. No payment was made."
         : "Stripe checkout is unavailable. No payment was made.",
     });
   }

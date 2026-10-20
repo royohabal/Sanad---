@@ -180,6 +180,7 @@ const arabicCopy: Record<string, string> = {
   'Optional, but always appreciated.':'اختياري، لكننا نقدر رأيك.','Secure checkout. Your details stay private.':'دفع آمن. بياناتك تبقى خاصة.',
   'Card payments are processed by Stripe and settle to SANAD’s connected account. Employer payouts are recorded separately.':'تُعالج مدفوعات البطاقات عبر Stripe وتصل إلى حساب سند المتصل. وتسجل مدفوعات صاحب العمل بشكل منفصل.',
   'Stripe test mode. No real payment will be charged in this workspace.':'وضع اختبار Stripe. لن يتم تحصيل أي مبلغ حقيقي في مساحة العمل هذه.',
+  'This Stripe account cannot accept KWD yet. No payment was made. Add a KWD bank account in Stripe settings.':'لا يمكن لحساب Stripe هذا قبول الدينار الكويتي بعد. لم يتم تحصيل أي مبلغ. أضف حساباً بنكياً يدعم الدينار الكويتي في إعدادات Stripe.',
   'Stripe is not enabled for live payments yet. No payment was made.':'لم يتم تفعيل مدفوعات Stripe الحقيقية بعد. لم يتم تحصيل أي مبلغ.',
   'Checkout was cancelled. No payment was confirmed.':'تم إلغاء الدفع. لم يتم تأكيد أي عملية دفع.',
   'Continue with':'المتابعة بمبلغ','Preparing secure checkout…':'جارٍ تجهيز الدفع الآمن…',
@@ -318,7 +319,7 @@ function TipPage() {
         if (result.paymentMode === 'stripe' && result.checkoutUrl) window.location.assign(result.checkoutUrl);
         else setLocation(`/tip-confirmation?tipId=${encodeURIComponent(result.tipId)}`);
       },
-      onError: (error) => setNotice(isHttpStatus(error, 503) ? 'Stripe is not enabled for live payments yet. No payment was made.' : isHttpStatus(error, 502) ? 'Stripe checkout is unavailable. No payment was made.' : 'We couldn’t start checkout. Please try again in a moment.'),
+      onError: (error) => setNotice(isHttpStatus(error, 422) ? 'This Stripe account cannot accept KWD yet. No payment was made. Add a KWD bank account in Stripe settings.' : isHttpStatus(error, 503) ? 'Stripe is not enabled for live payments yet. No payment was made.' : isHttpStatus(error, 502) ? 'Stripe checkout is unavailable. No payment was made.' : 'We couldn’t start checkout. Please try again in a moment.'),
     });
   };
   return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><div className="tip-card rise">
