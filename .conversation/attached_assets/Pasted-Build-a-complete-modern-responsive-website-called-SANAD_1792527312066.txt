@@ -1,0 +1,152 @@
+Build a complete, modern, responsive website called SANAD (سند) that allows customers to tip workers digitally by scanning a QR code. The goal is to help workers who miss out on tips because people no longer carry cash.
+The website should feel like a real, professional FinTech startup designed for the Kuwaiti market. Prioritize simplicity, trust, accessibility, and a smooth user experience.
+Create a polished, modern design that feels welcoming, trustworthy, and distinctive.
+- Design and Color Palette — SANAD (سند)
+  Use the exact color palette from the provided SANAD design system. Do not use navy blue, teal, or generic banking colors.
+  Brand identity: Warm, welcoming, modern Kuwaiti FinTech, combining deep burgundy, warm cream, and vibrant coral. The design should feel elegant, human, approachable, and trustworthy.
+  - Primary — Deep Burgundy: #581C2B
+Use for the main navigation, logo, primary buttons, headings, and important UI elements.
+  - Secondary — Warm Coral: #EF805F
+Use for the main tipping CTA, selected tip amounts, active states, progress indicators, and subtle highlights.
+  - Tertiary — Dark Wine: #3B1720
+Use for strong text, financial figures, and pressed button states.
+  - Main Background — Warm Cream: #F5E8D8
+Use as the main page background.
+  - Card Background — Soft Cream: #FAF4EC
+Use for dashboard cards, tipping forms, and secondary surfaces.
+  - White: #FFFFFF
+Use for elevated cards, worker profiles, payment panels, and modal surfaces.
+  - Borders — Soft Beige: #E8DAC8
+Use for subtle dividers, card outlines, and input borders.
+  - Success — Forest Green: #2E7D32
+Use for verified payments and completed payouts, with a soft green background #E8F5E9.
+  - Pending — Amber: #F57C00
+Use for pending transactions, with a soft amber background #FFF3E0.
+  - Use Plus Jakarta Sans for English typography and an Arabic-compatible font for Arabic text.
+  - Use rounded pill-shaped buttons and selection chips.
+  - Use generously rounded cards, soft burgundy-tinted shadows, and clean spacing.
+  - Highlight monetary amounts using large, bold typography.
+  - Suggested tip buttons should include 250 fils, 500 fils, 1.000 KWD, 2.000 KWD, and Custom.
+  - Selected tip amounts should use solid coral with bold white text.
+  - Use subtle Sadu-inspired or geometric cultural patterns at very low opacity, only as decorative accents.
+  - Keep animations smooth and restrained.
+  - Maintain excellent contrast, readability, and accessibility.
+  1. Apply the same color system consistently across the landing page, customer checkout, worker dashboard, company portal, and Arabic version.
+  2. Keep customer tipping pages especially simple, with a cream background, a clear worker profile card, coral tip selections, and one prominent burgundy or coral payment button.
+  3. Use color meaningfully for payment statuses. Never communicate success or failure through color alone.
+  4. Support Arabic right-to-left layouts without breaking alignment or spacing.
+  5. Avoid excessive gradients, neon colors, excessive decoration, and overcrowded dashboards.
+  6. Make the finished website look like a cohesive, custom-designed FinTech brand rather than a generic template.
+  7. Preserve all existing working database, authentication, and payment functionality while updating the design.
+  Overall visual direction: Deep burgundy foundations, warm cream surfaces, coral accents, elegant rounded shapes, and subtle Kuwaiti cultural character.
+- Use clean typography, rounded cards, subtle shadows, generous spacing, and simple icons.
+- Keep the design minimal and uncluttered. Avoid excessive text, unnecessary sections, and too many colors.
+- Use small, smooth animations and transitions to make the website feel alive without slowing it down.
+- Make the website look custom-designed, not like a generic AI-generated dashboard template.
+- Use clear visual hierarchy, attractive charts, and helpful empty states.
+- Make every page fully responsive on desktop, tablet, and mobile.
+- Use realistic sample data for the demo, clearly separated from real transactions.
+Customers must be able to tip workers without creating an account or signing in.
+The flow should be extremely simple:
+1. Scan the QR code on a worker's badge.
+2. Open a dedicated tipping page showing the worker's name, photo, and company.
+3. Choose a suggested tip amount or enter a custom amount in KWD.
+4. Optionally leave a rating.
+5. Pay through the configured payment gateway.
+6. See a clear payment confirmation.
+Requirements:
+- Aim for a tipping process that takes less than 10 seconds before payment, excluding the payment provider's authentication steps.
+- Keep the page focused on the worker, tip amount, and payment button.
+- No mandatory customer registration, reviews, comments, or personal information.
+- Display the total and currency clearly before payment.
+- Show clear loading, success, failure, and cancelled-payment states.
+- Verify payment status securely on the server before recording a successful tip.
+- Never mark a payment successful based only on a redirect to a success page.
+Each worker should have a secure personal account showing:
+- Total tips earned.
+- Pending tips.
+- Tips already paid through payroll.
+- This month's earnings.
+- Recent transactions.
+- Monthly earnings chart.
+- Average customer rating.
+- Downloadable earnings statement.
+- Personal QR code and printable badge.
+Use large financial figures, clear labels, and simple charts instead of long explanations.
+Workers should be able to access their accounts using a secure invitation and an authentication method supported by the configured authentication provider. Investigate phone-number OTP support before implementing it; do not assume it is enabled.
+Companies should have a dedicated dashboard where they can:
+- Register and manage their company profile.
+- Add, edit, activate, and deactivate workers.
+- Invite workers to access their accounts.
+- Generate and download individual QR badges.
+- Organize workers by branch or department.
+- View individual and company-wide tipping totals.
+- Review transaction history.
+- Manage monthly tip payout records.
+- Distinguish pending payouts from completed payouts.
+- Generate monthly reports and export CSV files.
+The interface should be easy to understand, even for a manager who is not technically experienced.
+Treat each worker's wallet as an earnings ledger unless a properly supported regulated wallet provider is configured.
+Clearly distinguish:
+- Tips successfully received through the payment gateway.
+- Tips awaiting settlement or payroll processing.
+- Tips recorded as paid by the employer.
+- Payment processing fees, refunds, and failed transactions where applicable.
+Implement secure authorization so workers can only access their own records and company users can only manage their authorized company's workers.
+Use server-side payment verification, unique transaction references, duplicate-payment protection, input validation, and audit logs for important financial changes.
+Never expose payment secrets or sensitive environment variables in frontend code. Do not use simulated payments in production or claim that money has been transferred when only a record has been created.
+Provide a visible Arabic/English language switcher.
+- Translate all pages, navigation, forms, buttons, errors, and payment screens.
+- Use proper right-to-left layout for Arabic.
+- Support Arabic and English worker names where available.
+- Format KWD amounts consistently.
+- Ensure both languages look professionally designed.
+Create only the pages that are needed:
+Public website
+- Landing page
+- How it works
+- Company registration/sign-in
+- Worker sign-in
+- Customer tipping page
+- Payment confirmation page
+Worker portal
+- Overview
+- Transactions
+- Earnings and payouts
+- My QR badge
+- Account settings
+Company portal
+- Overview
+- Workers
+- QR badges
+- Transactions
+- Monthly payouts
+- Reports
+- Company settings
+Use a clean sidebar on desktop and a simple mobile navigation. Hide links and actions users do not have permission to access.
+Keep the landing page short and visually engaging.
+Include:
+- A strong headline explaining that every worker deserves to be tipped.
+- A short supporting sentence.
+- A clear call to action for companies.
+- A visual demonstration of scanning a QR code and tipping.
+- Three concise steps explaining how SANAD works.
+- A small section explaining benefits for workers and businesses.
+- A simple footer with contact and language options.
+Avoid long paragraphs, excessive marketing claims, and unnecessary sections.
+Before changing the existing project, inspect the current codebase, framework, database, authentication, payment gateway, and environment configuration.
+Preserve existing working functionality and data. Do not replace working integrations with mock implementations.
+Build on the existing stack where possible. Store workers, companies, transactions, and payout records in the database rather than hardcoding them.
+Use the configured payment gateway and authentication provider. Check their actual supported methods and configuration before implementing new functionality.
+If a required external service is not configured, explain what is missing and provide a clearly labelled development/demo mode without pretending real payments or authentication have occurred.
+Before considering the project complete:
+- Test the entire customer tipping journey.
+- Test company registration and worker management.
+- Test worker invitation and authentication.
+- Verify that QR codes open the correct worker's tipping page.
+- Test Arabic and English layouts on mobile and desktop.
+- Check authorization between different companies and workers.
+- Verify payment success, failure, cancellation, and duplicate-payment handling.
+- Make sure all navigation, buttons, forms, charts, and downloads work.
+- Remove placeholder links, broken elements, redundant text, and unnecessary UI.
+Most important: Build a visually polished, simple, easy-to-use website. Do not overload the interface with features or text. Prioritize the guest tipping flow, worker earnings dashboard, company management, and accurate payout tracking. Make the product feel ready to demonstrate as a real FinTech startup.

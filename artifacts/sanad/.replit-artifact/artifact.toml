@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SANAD — Digital Tips"
+description = "A Kuwaiti digital tipping platform where customers scan a worker's QR code to send a tip, and workers and companies track earnings and payroll payouts."
+version = "1.0.0"
+id = "artifacts/sanad"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26138
+
+[services.development]
+run = "pnpm --filter @workspace/sanad run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sanad", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sanad/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26138"
+BASE_PATH = "/"

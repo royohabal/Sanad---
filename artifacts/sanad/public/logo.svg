@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 48" fill="none">
+  <rect x="1" y="1" width="46" height="46" rx="23" fill="#581C2B"/>
+  <text x="24" y="33" text-anchor="middle" fill="#FAF4EC" font-family="Noto Sans Arabic, sans-serif" font-size="28">س</text>
+  <text x="60" y="31" fill="#581C2B" font-family="Plus Jakarta Sans, sans-serif" font-size="21" font-weight="800" letter-spacing="4">SANAD</text>
+  <circle cx="155" cy="27" r="3" fill="#EF805F"/>
+</svg>

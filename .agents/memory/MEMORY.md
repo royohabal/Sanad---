@@ -1,0 +1,1 @@
+- [SANAD payment integrity](sanad-payment-integrity.md) — demo tip records never represent a charge; only verified provider events may mark a real tip successful.
