@@ -177,6 +177,9 @@ importers:
       '@clerk/shared':
         specifier: ^4.40.0
         version: 4.40.0(react-dom@19.1.4(react@19.1.4))(react@19.1.4)
+      '@replit/connectors-sdk':
+        specifier: ^0.4.3
+        version: 0.4.3
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod

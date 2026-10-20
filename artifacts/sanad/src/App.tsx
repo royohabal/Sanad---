@@ -178,6 +178,10 @@ const arabicCopy: Record<string, string> = {
   'Made with care in Kuwait.':'صُنع بعناية في الكويت.','Worker sign in':'دخول الموظفين','For companies':'للشركات',
   'Or enter another amount':'أو أدخل مبلغاً آخر','How was your experience?':'كيف كانت تجربتك؟',
   'Optional, but always appreciated.':'اختياري، لكننا نقدر رأيك.','Secure checkout. Your details stay private.':'دفع آمن. بياناتك تبقى خاصة.',
+  'Card payments are processed by Stripe and settle to SANAD’s connected account. Employer payouts are recorded separately.':'تُعالج مدفوعات البطاقات عبر Stripe وتصل إلى حساب سند المتصل. وتسجل مدفوعات صاحب العمل بشكل منفصل.',
+  'Stripe test mode. No real payment will be charged in this workspace.':'وضع اختبار Stripe. لن يتم تحصيل أي مبلغ حقيقي في مساحة العمل هذه.',
+  'Stripe is not enabled for live payments yet. No payment was made.':'لم يتم تفعيل مدفوعات Stripe الحقيقية بعد. لم يتم تحصيل أي مبلغ.',
+  'Checkout was cancelled. No payment was confirmed.':'تم إلغاء الدفع. لم يتم تأكيد أي عملية دفع.',
   'Continue with':'المتابعة بمبلغ','Preparing secure checkout…':'جارٍ تجهيز الدفع الآمن…',
   'Demo mode — no real payment will be charged.':'وضع تجريبي — لن يتم تحصيل أي مبلغ.','You don’t need an account to send a tip.':'لا تحتاج إلى حساب لإرسال إكرامية.',
   'Leave a little thank you':'اترك رسالة شكر بسيطة','Your details stay private.':'بياناتك تبقى خاصة.',
@@ -300,7 +304,7 @@ function TipPage() {
   const [amount, setAmount] = useState(2000);
   const [custom, setCustom] = useState('');
   const [rating, setRating] = useState<number | null>(null);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => new URLSearchParams(window.location.search).get('checkout') === 'cancelled' ? 'Checkout was cancelled. No payment was confirmed.' : '');
   const [, setLocation] = useLocation();
   const amountFils = custom ? Math.round(Number(custom) * 1000) : amount;
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -314,7 +318,7 @@ function TipPage() {
         if (result.paymentMode === 'stripe' && result.checkoutUrl) window.location.assign(result.checkoutUrl);
         else setLocation(`/tip-confirmation?tipId=${encodeURIComponent(result.tipId)}`);
       },
-      onError: (error) => setNotice(isHttpStatus(error, 503) ? 'Real checkout is not configured yet. No payment was charged.' : 'We couldn’t start checkout. Please try again in a moment.'),
+      onError: (error) => setNotice(isHttpStatus(error, 503) ? 'Stripe is not enabled for live payments yet. No payment was made.' : isHttpStatus(error, 502) ? 'Stripe checkout is unavailable. No payment was made.' : 'We couldn’t start checkout. Please try again in a moment.'),
     });
   };
   return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><div className="tip-card rise">
@@ -325,10 +329,10 @@ function TipPage() {
         <div className="amount-options">{[250,500,1000,2000].map((n)=><button data-testid={`button-amount-${n}`} type="button" onClick={()=>{setAmount(n);setCustom('')}} className={`amount-option ${!custom&&amount===n?'chosen':''}`} key={n}>KWD {(n/1000).toFixed(3)}</button>)}</div>
         <label className="custom-amount"><span>Or enter another amount</span><div><span>KWD</span><input data-testid="input-custom-amount" type="number" min="0.250" max="1000" step="0.001" placeholder="0.000" value={custom} onChange={(e)=>setCustom(e.target.value)}/></div></label>
         <div className="rating-row"><div><strong>How was your experience?</strong><span>Optional, but always appreciated.</span></div><div className="rating-stars">{[1,2,3,4,5].map((n)=><button data-testid={`button-rating-${n}`} aria-label={`${n} stars`} aria-pressed={n<= (rating ?? 0)} type="button" onClick={()=>setRating(rating===n?null:n)} key={n}><Star size={20} fill={n<=(rating ?? 0)?'currentColor':'none'}/></button>)}</div></div>
-        <div className="secure-tip"><ShieldCheck size={16}/><span>{import.meta.env.DEV ? 'Demo only — no payment will be charged.' : 'Secure checkout. Your details stay private.'}</span></div>
+        <div className="secure-tip"><ShieldCheck size={16}/><span>Card payments are processed by Stripe and settle to SANAD’s connected account. Employer payouts are recorded separately.</span></div>
+        {import.meta.env.DEV && <div className="demo-callout">Stripe test mode. No real payment will be charged in this workspace.</div>}
         {notice && <div className="form-notice" role="alert">{notice}</div>}
-        {import.meta.env.DEV && <div className="demo-callout">Development demo. No payment provider is connected; no charge will be made.</div>}
-        <PillButton type="submit" className="submit-tip" disabled={checkout.isPending}>{checkout.isPending ? 'Preparing checkout…' : import.meta.env.DEV ? <>Preview demo tip · {money(amountFils)} <ArrowUpRight size={17}/></> : <>Continue with {money(amountFils)} <ArrowUpRight size={17}/></>}</PillButton>
+        <PillButton type="submit" className="submit-tip" disabled={checkout.isPending}>{checkout.isPending ? 'Opening Stripe checkout…' : <>Continue with {money(amountFils)} <ArrowUpRight size={17}/></>}</PillButton>
       </form>
       <div className="guest-footnote"><ShieldCheck size={13}/> You don’t need an account to send a tip.</div>
     </>}

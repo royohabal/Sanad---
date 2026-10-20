@@ -2,6 +2,12 @@ import { clerkClient, getAuth } from "@clerk/express";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
+import { logger } from "../lib/logger";
+import {
+  createTipCheckoutSession,
+  getStripeCheckoutSession,
+  StripePaymentError,
+} from "../lib/stripePayments";
 import {
   auditLogsTable,
   companiesTable,
@@ -466,7 +472,12 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
     return;
   }
   const [worker] = await db
-    .select({ id: workersTable.id, name: workersTable.name, status: workersTable.status })
+    .select({
+      id: workersTable.id,
+      slug: workersTable.slug,
+      name: workersTable.name,
+      status: workersTable.status,
+    })
     .from(workersTable)
     .where(eq(workersTable.slug, body.data.workerSlug))
     .limit(1);
@@ -475,35 +486,78 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!isDevelopment) {
-    res.status(503).json({ error: "Payments are not configured" });
-    return;
-  }
-
+  const tipId = randomUUID();
   const [tip] = await db
     .insert(tipsTable)
     .values({
-      reference: `demo_${randomUUID()}`,
+      id: tipId,
+      reference: `sanad_${tipId}`,
       workerId: worker.id,
       amountFils: body.data.amountFils,
       currency: "KWD",
       rating: body.data.rating ?? null,
-      status: "demo",
-      isDemo: true,
+      status: "pending",
+      isDemo: false,
     })
     .returning({ id: tipsTable.id });
   if (!tip) {
-    res.status(500).json({ error: "Could not create the demo record" });
+    res.status(500).json({ error: "Could not create the tip record" });
     return;
   }
-  const response = {
-    tipId: tip.id,
-    paymentMode: "demo",
-    status: "demo",
-    checkoutUrl: null,
-    message: "Demo only. No payment was made or charged.",
-  };
-  res.json(CreateTipCheckoutResponse.parse(response));
+
+  try {
+    const session = await createTipCheckoutSession({
+      tipId: tip.id,
+      workerId: worker.id,
+      workerSlug: worker.slug,
+      workerName: worker.name,
+      amountFils: body.data.amountFils,
+    });
+    if (!session.id || !session.url) {
+      throw new Error("Stripe did not return a checkout URL");
+    }
+
+    await db
+      .update(tipsTable)
+      .set({
+        reference: session.id,
+        stripeCheckoutSessionId: session.id,
+        isDemo: !session.livemode,
+      })
+      .where(eq(tipsTable.id, tip.id));
+
+    res.json(
+      CreateTipCheckoutResponse.parse({
+        tipId: tip.id,
+        paymentMode: "stripe",
+        status: "pending",
+        checkoutUrl: session.url,
+        message: session.livemode
+          ? "Stripe checkout is ready. The payment settles to SANAD's connected Stripe account."
+          : "Stripe test mode is active. No real charge will be made.",
+      }),
+    );
+  } catch (error) {
+    const liveAccountNeedsSetup =
+      error instanceof StripePaymentError &&
+      error.code === "live_charges_disabled";
+    await db
+      .update(tipsTable)
+      .set({ status: "failed" })
+      .where(and(eq(tipsTable.id, tip.id), eq(tipsTable.status, "pending")));
+    logger.error(
+      {
+        tipId: tip.id,
+        stripeStatus: error instanceof StripePaymentError ? error.status : undefined,
+      },
+      "Could not create SANAD Stripe checkout",
+    );
+    res.status(liveAccountNeedsSetup ? 503 : 502).json({
+      error: liveAccountNeedsSetup
+        ? "Live Stripe payments are not enabled for this account. No payment was made."
+        : "Stripe checkout is unavailable. No payment was made.",
+    });
+  }
 });
 
 router.get("/tips/:tipId", async (req, res): Promise<void> => {
@@ -519,6 +573,7 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
       amountFils: tipsTable.amountFils,
       currency: tipsTable.currency,
       isDemo: tipsTable.isDemo,
+      stripeCheckoutSessionId: tipsTable.stripeCheckoutSessionId,
       workerName: workersTable.name,
       companyName: companiesTable.name,
     })
@@ -531,13 +586,82 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Tip not found" });
     return;
   }
+
+  let status = row.status;
+  let isDemo = row.isDemo;
+  if (status === "pending" && row.stripeCheckoutSessionId) {
+    let session;
+    try {
+      session = await getStripeCheckoutSession(row.stripeCheckoutSessionId);
+    } catch (error) {
+      logger.error(
+        {
+          tipId: row.id,
+          stripeStatus:
+            error instanceof StripePaymentError ? error.status : undefined,
+        },
+        "Could not verify SANAD Stripe checkout",
+      );
+      res.status(503).json({ error: "Payment status is temporarily unavailable" });
+      return;
+    }
+
+    const sessionMatchesTip =
+      session.id === row.stripeCheckoutSessionId &&
+      session.client_reference_id === row.id &&
+      session.metadata?.tip_id === row.id;
+    const paidAmountMatches =
+      session.amount_total === row.amountFils &&
+      session.currency?.toUpperCase() === row.currency.toUpperCase();
+
+    if (!sessionMatchesTip) {
+      logger.error({ tipId: row.id }, "Stripe session did not match SANAD tip");
+      res.status(502).json({ error: "Payment status could not be verified" });
+      return;
+    }
+
+    let paymentIntentId: string | null = null;
+    if (typeof session.payment_intent === "string") {
+      paymentIntentId = session.payment_intent;
+    } else if (session.payment_intent) {
+      paymentIntentId = session.payment_intent.id;
+    }
+
+    if (
+      session.status === "complete" &&
+      session.payment_status === "paid"
+    ) {
+      if (!paidAmountMatches) {
+        logger.error({ tipId: row.id }, "Stripe amount did not match SANAD tip");
+        res.status(502).json({ error: "Payment amount could not be verified" });
+        return;
+      }
+      status = session.livemode ? "succeeded" : "demo";
+      isDemo = !session.livemode;
+    } else if (session.status === "expired") {
+      status = "cancelled";
+      isDemo = !session.livemode;
+    }
+
+    if (status !== row.status || isDemo !== row.isDemo) {
+      await db
+        .update(tipsTable)
+        .set({
+          status,
+          isDemo,
+          stripePaymentIntentId: paymentIntentId,
+        })
+        .where(and(eq(tipsTable.id, row.id), eq(tipsTable.status, "pending")));
+    }
+  }
+
   res.json(
     GetTipStatusResponse.parse({
       tipId: row.id,
-      status: row.status,
+      status,
       amountFils: row.amountFils,
       currency: row.currency,
-      isDemo: row.isDemo,
+      isDemo,
       workerName: row.workerName,
       companyName: row.companyName,
     }),
