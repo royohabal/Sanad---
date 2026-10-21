@@ -267,9 +267,9 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .landing-reveal { opacity:0; transform:translateY(13px); transition:opacity .55s ease,transform .55s cubic-bezier(.2,.75,.2,1); }
 .landing-reveal.is-visible { opacity:1; transform:translateY(0); }
 .how-section { max-width:1180px; padding:72px 8% 84px; margin:auto; }
-.how-heading { display:flex; justify-content:space-between; align-items:end; gap:24px; }
+.how-heading { display:flex; flex-direction:column; align-items:flex-start; gap:7px; text-align:left; }
 .how-heading .eyebrow { flex:none; }
-.how-heading h2 { margin:0; color:#3B1720; font-size:clamp(25px,3vw,36px); line-height:1.17; letter-spacing:-.06em; }
+.how-heading h2 { width:100%; margin:0; color:#3B1720; font-size:clamp(25px,3vw,36px); line-height:1.17; letter-spacing:-.06em; text-align:left; }
 .how-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:28px; margin-top:39px; position:relative; }
 .how-steps::before { content:""; position:absolute; top:21px; left:8%; right:8%; border-top:1px dashed #DCC3AF; animation:connector-pulse 3.2s ease-in-out infinite; }
 .how-step { position:relative; z-index:1; padding:0 4px; }
@@ -337,7 +337,8 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .preview-signup { display:flex; width:max-content; align-items:center; gap:5px; margin:17px 0 0 auto; color:#581C2B; font-size:9px; font-weight:800; }
 .landing a:focus-visible,.landing button:focus-visible { outline:3px solid #EF805F; outline-offset:3px; }
 .landing button:active,.landing a:active { transform:scale(.98); }
-html[dir="rtl"] .how-heading { text-align:right; }
+html[dir="rtl"] .how-heading { align-items:flex-end; text-align:right; }
+html[dir="rtl"] .how-heading h2 { text-align:right; }
 html[dir="rtl"] .demo-success { text-align:right; }
 @keyframes landing-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 @keyframes language-switch { from { opacity:.84; } to { opacity:1; } }

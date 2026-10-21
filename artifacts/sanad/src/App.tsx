@@ -238,22 +238,24 @@ function localized(text: string, language: Language) {
   const translated = arabicCopy[trimmed];
   return translated ? text.replace(trimmed, translated) : text;
 }
-function LocalizedTree({ children }: { children: ReactNode }) {
-  const { language } = useLanguage();
-  if (language !== 'ar') return <>{children}</>;
-  return <>{Children.map(children, (child) => {
+function translateTree(children: ReactNode, language: Language): ReactNode {
+  return Children.map(children, (child) => {
     if (typeof child === 'string') return localized(child, language);
     if (!isValidElement<{ children?: ReactNode; placeholder?: string; title?: string; 'aria-label'?: string }>(child)) return child;
     const props = child.props;
     const translatedProps = {
-      placeholder: props.placeholder ? localized(props.placeholder, language) : undefined,
-      title: props.title ? localized(props.title, language) : undefined,
-      'aria-label': props['aria-label'] ? localized(props['aria-label'], language) : undefined,
+      ...(props.placeholder ? { placeholder: localized(props.placeholder, language) } : {}),
+      ...(props.title ? { title: localized(props.title, language) } : {}),
+      ...(props['aria-label'] ? { 'aria-label': localized(props['aria-label'], language) } : {}),
     };
     return props.children == null
       ? cloneElement(child, translatedProps)
-      : cloneElement(child, translatedProps, <LocalizedTree>{props.children}</LocalizedTree>);
-  })}</>;
+      : cloneElement(child, translatedProps, translateTree(props.children, language));
+  });
+}
+function LocalizedTree({ children }: { children: ReactNode }) {
+  const { language } = useLanguage();
+  return <>{language === 'ar' ? translateTree(children, language) : children}</>;
 }
 
 function LanguageToggle() {
@@ -729,8 +731,12 @@ function AuthRoutes() {
 }
 function App() {
   const [language,setLanguage]=useState<Language>(()=>localStorage.getItem('sanad-language')==='ar'?'ar':'en');
-  const toggle=()=>setLanguage((prev)=>{const next=prev==='en'?'ar':'en';localStorage.setItem('sanad-language',next);document.documentElement.dir=next==='ar'?'rtl':'ltr';document.documentElement.lang=next;return next});
-  useEffect(()=>{document.documentElement.dir=language==='ar'?'rtl':'ltr';document.documentElement.lang=language},[language]);
+  const toggle=()=>setLanguage((prev)=>prev==='en'?'ar':'en');
+  useEffect(()=>{
+    document.documentElement.dir=language==='ar'?'rtl':'ltr';
+    document.documentElement.lang=language;
+    try { localStorage.setItem('sanad-language',language); } catch { /* Keep the selected language for this session. */ }
+  },[language]);
   return <QueryClientProvider client={queryClient}><TooltipProvider><LanguageContext.Provider value={{language,toggle}}><WouterRouter base={basePath}><div className="grain"><ErrorBoundary><AuthRoutes/></ErrorBoundary></div></WouterRouter><Toaster/></LanguageContext.Provider></TooltipProvider></QueryClientProvider>;
 }
 function downloadCsv(rows: Array<Record<string,unknown>> | TipTransaction[], filename:string) {
