@@ -1,19 +1,20 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { verifyMongoConnection } from "./lib/mongo";
+import { initializeMongoStore } from "./lib/mongoStore";
 
-void verifyMongoConnection()
+void initializeMongoStore()
   .then(({ databaseName, collectionNames }) => {
     logger.info(
       { databaseName, collectionNames },
-      "MongoDB Atlas connection and collection listing verified",
+      "MongoDB SANAD data store initialized",
     );
   })
   .catch((error: unknown) => {
-    logger.warn(
+    logger.fatal(
       { errorType: error instanceof Error ? error.name : "UnknownError" },
-      "MongoDB Atlas check failed; connection details were omitted",
+      "MongoDB SANAD data store initialization failed; connection details were omitted",
     );
+    process.exit(1);
   });
 
 const rawPort = process.env["PORT"];

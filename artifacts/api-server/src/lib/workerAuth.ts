@@ -1,7 +1,13 @@
-import { and, eq, ne } from "drizzle-orm";
 import { randomBytes, scrypt as scryptCallback, createHash, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
-import { db, workerAuthSessionsTable, workersTable } from "@workspace/db";
+import {
+  createWorkerAuthSession,
+  deleteWorkerAuthSessionById,
+  deleteWorkerAuthSessions,
+  getWorkerAuthSessionByTokenHash,
+  getWorkerById,
+  updateWorker,
+} from "./mongoStore";
 
 const COOKIE_NAME = "sanad_worker_session";
 const ACTIVE_SESSION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -93,7 +99,7 @@ export async function createWorkerSession(
   const lifetime = state === "password_setup" ? SETUP_SESSION_MS : ACTIVE_SESSION_MS;
   const expiresAt = new Date(Date.now() + lifetime);
   const token = randomBytes(32).toString("base64url");
-  await db.insert(workerAuthSessionsTable).values({
+  await createWorkerAuthSession({
     workerId,
     state,
     tokenHash: tokenHash(token),
@@ -112,27 +118,15 @@ export async function getWorkerSession(req: Request) {
   const token = cookieToken(req);
   if (!token) return null;
   const hash = tokenHash(token);
-  const [session] = await db
-    .select()
-    .from(workerAuthSessionsTable)
-    .where(eq(workerAuthSessionsTable.tokenHash, hash))
-    .limit(1);
+  const session = await getWorkerAuthSessionByTokenHash(hash);
   if (!session) return null;
   if (session.expiresAt <= new Date()) {
-    await db
-      .delete(workerAuthSessionsTable)
-      .where(eq(workerAuthSessionsTable.id, session.id));
+    await deleteWorkerAuthSessionById(session.id);
     return null;
   }
-  const [worker] = await db
-    .select()
-    .from(workersTable)
-    .where(eq(workersTable.id, session.workerId))
-    .limit(1);
+  const worker = await getWorkerById(session.workerId);
   if (!worker || worker.status !== "active") {
-    await db
-      .delete(workerAuthSessionsTable)
-      .where(eq(workerAuthSessionsTable.id, session.id));
+    await deleteWorkerAuthSessionById(session.id);
     return null;
   }
   return { session, worker, tokenHash: hash };
@@ -149,39 +143,28 @@ export async function getActiveWorkerForRequest(req: Request) {
 export async function destroyWorkerSession(req: Request): Promise<void> {
   const token = cookieToken(req);
   if (!token) return;
-  await db
-    .delete(workerAuthSessionsTable)
-    .where(eq(workerAuthSessionsTable.tokenHash, tokenHash(token)));
+  await deleteWorkerAuthSessions({ tokenHash: tokenHash(token) });
 }
 
 export async function revokeWorkerSessions(workerId: string): Promise<void> {
-  await db
-    .delete(workerAuthSessionsTable)
-    .where(eq(workerAuthSessionsTable.workerId, workerId));
+  await deleteWorkerAuthSessions({ workerId });
 }
 
 export async function revokeOtherWorkerSessions(
   workerId: string,
   exceptSessionId: string,
 ): Promise<void> {
-  await db
-    .delete(workerAuthSessionsTable)
-    .where(
-      and(
-        eq(workerAuthSessionsTable.workerId, workerId),
-        ne(workerAuthSessionsTable.id, exceptSessionId),
-      ),
-    );
+  await deleteWorkerAuthSessions({ workerId, exceptId: exceptSessionId });
 }
 
 export async function issueTemporaryWorkerPassword(workerId: string): Promise<string> {
   const temporaryPassword = generateTemporaryPassword();
   const workerPasswordHash = await hashWorkerPassword(temporaryPassword);
-  const [worker] = await db
-    .update(workersTable)
-    .set({ workerPasswordHash, passwordChangeRequired: true })
-    .where(and(eq(workersTable.id, workerId), eq(workersTable.status, "active")))
-    .returning({ id: workersTable.id });
+  const worker = await updateWorker(
+    workerId,
+    { workerPasswordHash, passwordChangeRequired: true },
+    { status: "active" },
+  );
   if (!worker) throw new Error("Active worker not found");
   await revokeWorkerSessions(workerId);
   return temporaryPassword;
@@ -193,8 +176,6 @@ export async function upgradeSetupSession(
   workerId: string,
   setupSessionId: string,
 ): Promise<void> {
-  await db
-    .delete(workerAuthSessionsTable)
-    .where(eq(workerAuthSessionsTable.id, setupSessionId));
+  await deleteWorkerAuthSessionById(setupSessionId);
   await createWorkerSession(req, res, workerId, "active");
 }

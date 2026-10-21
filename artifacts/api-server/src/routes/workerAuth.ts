@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { Router, type IRouter, type Request } from "express";
 import {
@@ -7,7 +6,7 @@ import {
   WorkerLoginBody,
   WorkerLogoutResponse,
 } from "@workspace/api-zod";
-import { db, workersTable } from "@workspace/db";
+import { getWorkerByPhone, updateWorker } from "../lib/mongoStore";
 import {
   clearWorkerSessionCookie,
   createWorkerSession,
@@ -77,13 +76,7 @@ router.post("/worker/auth/login", async (req, res): Promise<void> => {
     res.status(429).json({ error: "Too many sign-in attempts. Try again later." });
     return;
   }
-  const [worker] = phoneNumber
-    ? await db
-        .select()
-        .from(workersTable)
-        .where(eq(workersTable.phoneNumber, phoneNumber))
-        .limit(1)
-    : [];
+  const worker = phoneNumber ? await getWorkerByPhone(phoneNumber) : null;
   const valid =
     !!worker &&
     worker.status === "active" &&
@@ -167,11 +160,10 @@ router.post("/worker/auth/password", async (req, res): Promise<void> => {
     return;
   }
   const workerPasswordHash = await hashWorkerPassword(parsed.data.newPassword);
-  const [worker] = await db
-    .update(workersTable)
-    .set({ workerPasswordHash, passwordChangeRequired: false })
-    .where(eq(workersTable.id, auth.worker.id))
-    .returning({ id: workersTable.id, name: workersTable.name });
+  const worker = await updateWorker(auth.worker.id, {
+    workerPasswordHash,
+    passwordChangeRequired: false,
+  });
   if (!worker) {
     res.status(404).json({ error: "Worker account not found." });
     return;

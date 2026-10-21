@@ -1,22 +1,45 @@
 import { clerkClient, getAuth } from "@clerk/express";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import type { Worker } from "@workspace/db";
 import {
   createTipCheckoutSession,
   getStripeCheckoutSession,
   StripePaymentError,
 } from "../lib/stripePayments";
 import {
-  auditLogsTable,
-  companiesTable,
-  companyMembersTable,
-  db,
-  payoutsTable,
-  tipsTable,
-  workersTable,
-} from "@workspace/db";
+  averageRatingForWorker,
+  companyPayoutRows,
+  companyTransactionRows,
+  createCompany,
+  createCompanyMembership,
+  createPayout,
+  createTip,
+  createWorker,
+  getCompanyById,
+  getCompanyByNameAndDemo,
+  getCompanyMembership,
+  getPayoutById,
+  getPublicWorker,
+  getTipById,
+  getTipWithNames,
+  getWorkerByClerkUserId,
+  getWorkerById,
+  getWorkerBySlug,
+  getWorkersByCompany,
+  linkInvitedWorker,
+  monthlyTipsForCompany,
+  monthlyTipsForWorker,
+  sumPayoutsForWorkers as sumMongoPayoutsForWorkers,
+  sumTipsForWorkers as sumMongoTipsForWorkers,
+  updateCompany,
+  updatePayoutStatus,
+  updateTip,
+  updateWorker,
+  workerTransactionRows,
+  writeAudit,
+} from "../lib/mongoStore";
 import {
   generateTemporaryPassword,
   getActiveWorkerForRequest,
@@ -71,20 +94,11 @@ function currentUserId(req: Request, res: Response): string | null {
 }
 
 async function companyMembership(userId: string) {
-  const [membership] = await db
-    .select()
-    .from(companyMembersTable)
-    .where(eq(companyMembersTable.clerkUserId, userId))
-    .limit(1);
-  return membership ?? null;
+  return getCompanyMembership(userId);
 }
 
 async function workerForUser(userId: string) {
-  let [worker] = await db
-    .select()
-    .from(workersTable)
-    .where(eq(workersTable.clerkUserId, userId))
-    .limit(1);
+  let worker = await getWorkerByClerkUserId(userId);
   if (worker) return worker;
 
   // Worker access is linked only through backend-owned Clerk invitation metadata
@@ -102,11 +116,7 @@ async function workerForUser(userId: string) {
     return null;
   }
 
-  [worker] = await db
-    .select()
-    .from(workersTable)
-    .where(eq(workersTable.id, workerId))
-    .limit(1);
+  worker = await getWorkerById(workerId);
   if (
     !worker ||
     worker.status !== "invited" ||
@@ -115,11 +125,7 @@ async function workerForUser(userId: string) {
     return null;
   }
 
-  const [linked] = await db
-    .update(workersTable)
-    .set({ clerkUserId: userId, status: "active" })
-    .where(and(eq(workersTable.id, worker.id), sql`${workersTable.clerkUserId} IS NULL`))
-    .returning();
+  const linked = await linkInvitedWorker(worker.id, userId);
   if (!linked) return null;
   await writeAudit(worker.companyId, userId, "worker.invitation.accepted", "worker", worker.id);
   return linked;
@@ -139,24 +145,6 @@ async function currentWorker(req: Request, res: Response) {
     return null;
   }
   return worker;
-}
-
-async function writeAudit(
-  companyId: string | null,
-  actorClerkUserId: string | null,
-  action: string,
-  entityType: string,
-  entityId: string | null,
-  details: Record<string, unknown> = {},
-) {
-  await db.insert(auditLogsTable).values({
-    companyId,
-    actorClerkUserId,
-    action,
-    entityType,
-    entityId,
-    details,
-  });
 }
 
 function makeUrl(req: Request, path: string): string {
@@ -191,20 +179,7 @@ async function sumTipsForWorkers(
   statuses: readonly ("succeeded" | "demo" | "pending" | "failed" | "cancelled")[],
   range?: { from: Date; to: Date },
 ): Promise<number> {
-  if (!workerIds.length) return 0;
-  const filters = [
-    inArray(tipsTable.workerId, workerIds),
-    inArray(tipsTable.status, [...statuses]),
-  ];
-  if (range) {
-    filters.push(gte(tipsTable.createdAt, range.from));
-    filters.push(lt(tipsTable.createdAt, range.to));
-  }
-  const [row] = await db
-    .select({ amount: sql<number>`coalesce(sum(${tipsTable.amountFils}), 0)` })
-    .from(tipsTable)
-    .where(and(...filters));
-  return Number(row?.amount ?? 0);
+  return sumMongoTipsForWorkers(workerIds, statuses, range);
 }
 
 async function sumPayoutsForWorkers(
@@ -212,15 +187,7 @@ async function sumPayoutsForWorkers(
   status?: "pending" | "paid",
   range?: { month: string },
 ): Promise<number> {
-  if (!workerIds.length) return 0;
-  const filters = [inArray(payoutsTable.workerId, workerIds)];
-  if (status) filters.push(eq(payoutsTable.status, status));
-  if (range) filters.push(eq(payoutsTable.month, range.month));
-  const [row] = await db
-    .select({ amount: sql<number>`coalesce(sum(${payoutsTable.amountFils}), 0)` })
-    .from(payoutsTable)
-    .where(and(...filters));
-  return Number(row?.amount ?? 0);
+  return sumMongoPayoutsForWorkers(workerIds, status, range?.month);
 }
 
 function monthRange(month: string) {
