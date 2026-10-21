@@ -1,5 +1,20 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { verifyMongoConnection } from "./lib/mongo";
+
+void verifyMongoConnection()
+  .then(({ databaseName, collectionNames }) => {
+    logger.info(
+      { databaseName, collectionNames },
+      "MongoDB Atlas connection and collection listing verified",
+    );
+  })
+  .catch((error: unknown) => {
+    logger.warn(
+      { errorType: error instanceof Error ? error.name : "UnknownError" },
+      "MongoDB Atlas check failed; connection details were omitted",
+    );
+  });
 
 const rawPort = process.env["PORT"];
 
