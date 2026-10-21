@@ -523,15 +523,12 @@ function CompanySettings() {
   return <PortalLayout company title={notConfigured?'Set up your company':'Settings'}><QueryState loading={q.isLoading} error={q.isError&&!notConfigured} retry={()=>void q.refetch()}>{notConfigured?<CompanyOnboarding/>:q.data&&<form className="surface settings-form" onSubmit={submit}><div className="panel-kicker">COMPANY PROFILE</div><h3>Company details</h3><label>Company name<input required minLength={2} maxLength={160} value={name} onChange={e=>setName(e.target.value)}/></label><label>Commercial registration number<input maxLength={100} value={registration} onChange={e=>setRegistration(e.target.value)} placeholder="Optional"/></label><label>Contact email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="team@company.com"/></label><div className="notice-box"><ShieldCheck size={17}/><span>Your team’s records are private to your company account.</span></div>{create.isError&&<div className="form-notice">Couldn’t save the profile. Try again.</div>}{saved&&<div className="success-notice"><Check size={15}/> Saved.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Saving…':'Save changes'} <ArrowUpRight size={15}/></PillButton><DemoFlag demo={q.data.isDemo}/></form>}</QueryState></PortalLayout>;
 }
 function AuthPage({ signup=false }: { signup?:boolean }) {
-  return <LocalizedTree><main className="auth-page"><div className="auth-brand"><Brand/><LanguageToggle/></div><div className="auth-copy"><div className="eyebrow">A better way to say thank you</div><h1>Good service<br/><em>deserves a SANAD.</em></h1><p>Simple, thoughtful, and here when you need it.</p></div><div className="auth-clerk">{signup?<SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} forceRedirectUrl={`${basePath}/`}/>:<SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/`}/>}</div><div className="auth-footer"><Brand/><span>Made with care in Kuwait.</span></div></main></LocalizedTree>;
+  return <LocalizedTree><main className="auth-page"><div className="auth-brand"><Brand/><LanguageToggle/></div><div className="auth-copy"><div className="eyebrow">A better way to say thank you</div><h1>Good service<br/><em>deserves a SANAD.</em></h1><p>Simple, thoughtful, and here when you need it.</p></div><div className="auth-clerk">{signup?<SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} forceRedirectUrl={`${basePath}/continue`}/>:<SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/continue`}/>}</div><div className="auth-footer"><Brand/><span>Made with care in Kuwait.</span></div></main></LocalizedTree>;
 }
 function SignedInHome() {
   const worker = useGetWorkerDashboard({ query: { queryKey: getGetWorkerDashboardQueryKey(), retry: false } });
   if (worker.isLoading) return <main className="home-routing"><Skeleton rows={4}/></main>;
   return <Redirect to={worker.data ? '/worker' : '/company'}/>;
-}
-function HomeRedirect() {
-  return <><Show when="signed-in"><SignedInHome/></Show><Show when="signed-out"><Landing/></Show></>;
 }
 function Protected({ children }: { children: ReactNode }) {
   return <><Show when="signed-in">{children}</Show><Show when="signed-out"><Redirect to="/sign-in"/></Show></>;
@@ -540,7 +537,8 @@ function AuthRoutes() {
   const [,setLocation]=useLocation();
   return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={appearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={{signIn:{start:{title:'Welcome back',subtitle:'Sign in to your SANAD account'}},signUp:{start:{title:'Join SANAD',subtitle:'Bring a little more appreciation to your team'}}}} routerPush={(to)=>setLocation(stripBase(to))} routerReplace={(to)=>setLocation(stripBase(to),{replace:true})}>
     <Switch>
-      <Route path="/" component={HomeRedirect}/>
+      <Route path="/" component={Landing}/>
+      <Route path="/continue" component={()=> <Protected><SignedInHome/></Protected>}/>
       <Route path="/sign-in/*?" component={()=> <AuthPage/>}/>
       <Route path="/sign-up/*?" component={()=> <AuthPage signup/>}/>
       <Route path="/tip/:slug" component={TipPage}/>
