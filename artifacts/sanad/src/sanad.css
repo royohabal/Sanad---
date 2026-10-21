@@ -391,3 +391,5 @@ html[dir="rtl"] .side-link-button { text-align:right; }
   .worker-auth-footer { padding:0 2px; }
   .worker-row-actions { min-width:130px; }
 }
+.company-settings-logout { padding-top:14px; border-top:1px solid #E8DAC8; }
+.company-settings-logout .outline-button { width:100%; min-height:40px; }
