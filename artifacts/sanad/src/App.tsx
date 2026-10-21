@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
 import './sanad.css';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk } from '@clerk/react';
@@ -314,9 +314,10 @@ function Landing() {
   const [demoRating, setDemoRating] = useState<number | null>(null);
   const [demoComplete, setDemoComplete] = useState(false);
   const [languageSwitching, setLanguageSwitching] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previousLanguage.current === language) return;
     previousLanguage.current = language;
+    document.querySelectorAll('.landing-reveal').forEach((node) => node.classList.add('is-visible'));
     setLanguageSwitching(true);
     const timeout = window.setTimeout(() => setLanguageSwitching(false), 220);
     return () => window.clearTimeout(timeout);
@@ -846,9 +847,12 @@ function AuthRoutes() {
   </ClerkProvider>;
 }
 function App() {
-  const [language,setLanguage]=useState<Language>(()=>localStorage.getItem('sanad-language')==='ar'?'ar':'en');
+  const [language,setLanguage]=useState<Language>(()=> {
+    try { return localStorage.getItem('sanad-language')==='ar'?'ar':'en'; }
+    catch { return 'en'; }
+  });
   const toggle=()=>setLanguage((prev)=>prev==='en'?'ar':'en');
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     document.documentElement.dir=language==='ar'?'rtl':'ltr';
     document.documentElement.lang=language;
     try { localStorage.setItem('sanad-language',language); } catch { /* Keep the selected language for this session. */ }
