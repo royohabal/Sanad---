@@ -158,7 +158,6 @@ export async function createTipCheckoutSession(input: {
     "line_items[0][price_data][product_data][name]": "SANAD Guest Tip",
     "line_items[0][price_data][product_data][description]":
       `KWD ${(input.amountFils / 1000).toFixed(3)} tip · rate ${input.kwdToUsdRate} USD per KWD`,
-    "payment_method_types[0]": "card",
     client_reference_id: input.tipId,
     success_url: successUrl.toString(),
     cancel_url: cancelUrl.toString(),
