@@ -405,3 +405,12 @@ html[dir="rtl"] .side-link-button { text-align:right; }
 .worker-password-form { margin-top:14px; }
 .worker-password-hint { color:#92796C;font-size:8px; }
 .worker-password-submit { justify-self:start; }
+.conversion-review { margin:15px 0 8px;padding:15px;border:1px solid #E8DAC8;border-radius:16px;background:#FFF9F2; }
+.conversion-row { display:flex;justify-content:space-between;align-items:center;gap:12px;color:#745B56;font-size:10px; }
+.conversion-row strong { color:#3B1720;font-size:13px; }
+.conversion-pay { margin-top:10px;padding-top:10px;border-top:1px solid #E8DAC8; }
+.conversion-pay strong { color:#581C2B;font-size:18px; }
+.conversion-review p { margin:12px 0 5px;color:#745B56;font-size:9px; }
+.conversion-review small { color:#92796C;font-size:8px;line-height:1.5; }
+.conversion-review a { color:#581C2B;font-weight:800; }
+[dir="rtl"] .conversion-review { text-align:right; }

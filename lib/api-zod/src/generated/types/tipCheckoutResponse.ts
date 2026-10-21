@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { TipCheckoutResponseCurrency } from './tipCheckoutResponseCurrency';
+import type { TipCheckoutResponsePaymentCurrency } from './tipCheckoutResponsePaymentCurrency';
 import type { TipCheckoutResponsePaymentMode } from './tipCheckoutResponsePaymentMode';
 import type { TipCheckoutResponseStatus } from './tipCheckoutResponseStatus';
 
@@ -15,4 +17,11 @@ export interface TipCheckoutResponse {
   /** @nullable */
   checkoutUrl?: string | null;
   message: string;
+  amountFils: number;
+  currency: TipCheckoutResponseCurrency;
+  usdAmountCents: number;
+  paymentCurrency: TipCheckoutResponsePaymentCurrency;
+  kwdToUsdRate: string;
+  rateSource: string;
+  rateUpdatedAt: Date;
 }

@@ -12,7 +12,7 @@ import {
   Phone, QrCode, Search, Settings, ShieldCheck, Sparkles, Star, Users, Wallet, X
 } from 'lucide-react';
 import {
-  useGetPublicWorker, getGetPublicWorkerQueryKey, useCreateTipCheckout, useGetTipStatus,
+  useGetPublicWorker, getGetPublicWorkerQueryKey, useCreateTipQuote, useCreateTipCheckout, useGetTipStatus,
   getGetTipStatusQueryKey, useGetWorkerDashboard, getGetWorkerDashboardQueryKey,
   useListWorkerTransactions, getListWorkerTransactionsQueryKey, useListWorkerPayouts,
   getListWorkerPayoutsQueryKey, useGetWorkerBadge, getGetWorkerBadgeQueryKey,
@@ -24,7 +24,7 @@ import {
   useWorkerLogin, useGetWorkerAuthSession, getGetWorkerAuthSessionQueryKey,
   useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword
 } from '@workspace/api-client-react';
-import type { PayoutRecord, TipTransaction } from '@workspace/api-client-react';
+import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -63,6 +63,7 @@ type Language = 'en' | 'ar';
 const LanguageContext = createContext<{ language: Language; toggle: () => void }>({ language: 'en', toggle: () => {} });
 const useLanguage = () => useContext(LanguageContext);
 const money = (fils = 0) => `KWD ${(fils / 1000).toFixed(3)}`;
+const usdMoney = (cents = 0) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const dateLabel = (value?: string, language: Language = 'en') => value ? new Intl.DateTimeFormat(language === 'ar' ? 'ar-KW' : 'en-KW', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
 const monthName = (value: string, language: Language = 'en') => {
   const d = new Date(`${value}-01T12:00:00`);
@@ -380,40 +381,142 @@ function QrGraphic() {
 function TipPage() {
   const [, params] = useRoute('/tip/:slug');
   const slug = params?.slug ?? '';
+  const { language } = useLanguage();
+  const ar = language === 'ar';
   const { data: worker, isLoading, isError, refetch } = useGetPublicWorker(slug, { query: { enabled: !!slug, queryKey: getGetPublicWorkerQueryKey(slug) } });
+  const quoteMutation = useCreateTipQuote();
   const checkout = useCreateTipCheckout();
   const [amount, setAmount] = useState(2000);
   const [custom, setCustom] = useState('');
   const [rating, setRating] = useState<number | null>(null);
-  const [notice, setNotice] = useState(() => new URLSearchParams(window.location.search).get('checkout') === 'cancelled' ? 'Checkout was cancelled. No payment was confirmed.' : '');
+  const [quote, setQuote] = useState<TipQuote | null>(null);
+  const [quoteRating, setQuoteRating] = useState<number | null>(null);
+  const [preparedCheckout, setPreparedCheckout] = useState<TipCheckoutResponse | null>(null);
+  const [notice, setNotice] = useState(() => new URLSearchParams(window.location.search).get('checkout') === 'cancelled' ? (ar ? 'تم إلغاء الدفع. لم يتم تأكيد أي مبلغ.' : 'Checkout was cancelled. No payment was confirmed.') : '');
   const [, setLocation] = useLocation();
   const amountFils = custom ? Math.round(Number(custom) * 1000) : amount;
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setNotice('');
-    if (!Number.isFinite(amountFils) || amountFils < 250) { setNotice('Please enter at least KWD 0.250.'); return; }
-    checkout.mutate({ data: { workerSlug: slug, amountFils, rating } }, {
+  const clearReview = () => {
+    setQuote(null);
+    setQuoteRating(null);
+    setPreparedCheckout(null);
+    setNotice('');
+  };
+  const requestId = () => {
+    const key = 'sanad-tip-request';
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as {
+        id?: string; slug?: string; amountFils?: number; rating?: number | null; createdAt?: number;
+      } | null;
+      if (
+        saved?.id &&
+        saved.slug === slug &&
+        saved.amountFils === amountFils &&
+        (saved.rating ?? null) === rating &&
+        typeof saved.createdAt === 'number' &&
+        Date.now() - saved.createdAt < 24 * 60 * 60 * 1000
+      ) return saved.id;
+    } catch {
+      sessionStorage.removeItem(key);
+    }
+    const id = window.crypto.randomUUID();
+    sessionStorage.setItem(key, JSON.stringify({ id, slug, amountFils, rating, createdAt: Date.now() }));
+    return id;
+  };
+  const continueToCheckout = () => {
+    if (preparedCheckout) {
+      if (preparedCheckout.checkoutUrl) window.location.assign(preparedCheckout.checkoutUrl);
+      else setLocation(`/tip-confirmation?tipId=${encodeURIComponent(preparedCheckout.tipId)}`);
+      return;
+    }
+    if (!quote) return;
+    checkout.mutate({
+      data: {
+        workerSlug: slug,
+        amountFils: quote.amountFils,
+        rating,
+        quoteToken: quote.quoteToken,
+        requestId: requestId(),
+      },
+    }, {
       onSuccess: (result) => {
         sessionStorage.setItem('sanad-tip-id', result.tipId);
         sessionStorage.setItem('sanad-tip-mode', result.paymentMode);
         sessionStorage.setItem('sanad-tip-worker', worker?.name ?? '');
-        if (result.paymentMode === 'stripe' && result.checkoutUrl) window.location.assign(result.checkoutUrl);
-        else setLocation(`/tip-confirmation?tipId=${encodeURIComponent(result.tipId)}`);
+        try {
+          const saved = JSON.parse(sessionStorage.getItem('sanad-tip-request') ?? 'null');
+          if (saved?.id) sessionStorage.setItem('sanad-tip-request', JSON.stringify({ ...saved, tipId: result.tipId }));
+        } catch { /* A fresh request ID will be generated after this checkout. */ }
+        if (result.checkoutUrl) {
+          const sameReview =
+            result.amountFils === quote.amountFils &&
+            result.usdAmountCents === quote.usdAmountCents &&
+            result.kwdToUsdRate === quote.kwdToUsdRate;
+          if (sameReview) window.location.assign(result.checkoutUrl);
+          else {
+            setPreparedCheckout(result);
+            setNotice(ar
+              ? 'تم تجهيز الدفع بالمبلغ المحفوظ أدناه. راجعه ثم تابع.'
+              : 'This checkout uses the saved conversion shown below. Review it, then continue.');
+          }
+        } else {
+          setLocation(`/tip-confirmation?tipId=${encodeURIComponent(result.tipId)}`);
+        }
       },
-      onError: (error) => setNotice(isHttpStatus(error, 422) ? 'KWD payments aren’t available yet. No payment was made.' : isHttpStatus(error, 503) ? 'Live payments aren’t enabled yet. No payment was made.' : isHttpStatus(error, 502) ? 'Stripe checkout is unavailable. No payment was made.' : 'We couldn’t start checkout. Please try again in a moment.'),
+      onError: (error) => {
+        if (isHttpStatus(error, 409)) {
+          setQuote(null);
+          setNotice(ar ? 'انتهت صلاحية سعر التحويل. راجع المبلغ مرة أخرى.' : 'This exchange quote expired. Please review the amount again.');
+        } else {
+          setNotice(isHttpStatus(error, 503)
+            ? (ar ? 'الدفع التجريبي غير متاح حالياً. لم يتم الدفع.' : 'Test checkout is unavailable. No payment was made.')
+            : isHttpStatus(error, 502)
+              ? (ar ? 'خدمة التحويل أو الدفع غير متاحة. لم يتم الدفع.' : 'Currency conversion or checkout is unavailable. No payment was made.')
+              : (ar ? 'تعذر بدء الدفع. حاول مرة أخرى.' : 'We couldn’t start checkout. Please try again.'));
+        }
+      },
     });
   };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setNotice('');
+    if (preparedCheckout) { continueToCheckout(); return; }
+    if (hasCurrentQuote) { continueToCheckout(); return; }
+    if (!Number.isFinite(amountFils) || amountFils < 250) { setNotice(ar ? 'أدخل مبلغاً لا يقل عن KWD 0.250.' : 'Please enter at least KWD 0.250.'); return; }
+    quoteMutation.mutate({ data: { workerSlug: slug, amountFils, rating } }, {
+      onSuccess: (result) => { setQuote(result); setQuoteRating(rating); },
+      onError: (error) => setNotice(isHttpStatus(error, 503)
+        ? (ar ? 'خدمة التحويل غير مُهيأة. لم يتم الدفع.' : 'Currency conversion is not configured. No payment was made.')
+        : isHttpStatus(error, 502)
+          ? (ar ? 'سعر التحويل غير متاح. لم يتم الدفع.' : 'The exchange rate is unavailable. No payment was made.')
+          : (ar ? 'تعذر إعداد المبلغ. حاول مرة أخرى.' : 'We couldn’t prepare the amount. Please try again.')),
+    });
+  };
+  const displayedAmount = preparedCheckout?.amountFils ?? quote?.amountFils;
+  const displayedUsdCents = preparedCheckout?.usdAmountCents ?? quote?.usdAmountCents;
+  const displayedRate = preparedCheckout?.kwdToUsdRate ?? quote?.kwdToUsdRate;
+  const displayedRateSource = preparedCheckout?.rateSource ?? quote?.rateSource;
+  const displayedRateUpdatedAt = preparedCheckout?.rateUpdatedAt ?? quote?.rateUpdatedAt;
+  const hasCurrentQuote =
+    !!quote &&
+    quote.amountFils === amountFils &&
+    quote.workerSlug === slug &&
+    quoteRating === rating;
   return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><div className="tip-card rise">
     {isLoading ? <Skeleton rows={4}/> : isError || !worker ? <ErrorPanel retry={() => { void refetch(); }}/> : <>
       <div className="tip-profile"><Avatar name={worker.name} photo={worker.photoUrl} size="lg"/><span className="tip-brandline">{worker.companyName}</span><h1>{worker.name}</h1>{worker.arabicName && <span className="arabic tip-arabic" dir="rtl">{worker.arabicName}</span>}<p>{worker.role}{worker.branch ? ` · ${worker.branch}` : ''}</p></div>
       <form onSubmit={submit} className="tip-form">
-        <label className="form-label">Amount <small>KWD</small></label>
-        <div className="amount-options">{[250,500,1000,2000].map((n)=><button data-testid={`button-amount-${n}`} type="button" onClick={()=>{setAmount(n);setCustom('')}} className={`amount-option ${!custom&&amount===n?'chosen':''}`} key={n}>KWD {(n/1000).toFixed(3)}</button>)}</div>
-        <label className="custom-amount"><span>Custom amount</span><div><span>KWD</span><input data-testid="input-custom-amount" aria-label="Custom amount in KWD" type="number" min="0.250" max="1000" step="0.001" placeholder="0.000" value={custom} onChange={(e)=>setCustom(e.target.value)}/></div></label>
-        <div className="rating-row"><div><strong>Rating (optional)</strong></div><div className="rating-stars">{[1,2,3,4,5].map((n)=><button data-testid={`button-rating-${n}`} aria-label={`${n} stars`} aria-pressed={n<= (rating ?? 0)} type="button" onClick={()=>setRating(rating===n?null:n)} key={n}><Star size={20} fill={n<=(rating ?? 0)?'currentColor':'none'}/></button>)}</div></div>
-        <div className="secure-tip"><ShieldCheck size={16}/><span>Secure card payment via Stripe.</span></div>
-        {import.meta.env.DEV && <div className="demo-callout" data-testid="text-stripe-test-mode">Test mode · No real payment.</div>}
+        <label className="form-label">{ar ? 'مبلغ البقشيش' : 'Tip amount'} <small>KWD</small></label>
+        <div className="amount-options">{[250,500,1000,2000].map((n)=><button disabled={quoteMutation.isPending} data-testid={`button-amount-${n}`} type="button" onClick={()=>{setAmount(n);setCustom('');clearReview()}} className={`amount-option ${!custom&&amount===n?'chosen':''}`} key={n}>KWD {(n/1000).toFixed(3)}</button>)}</div>
+        <label className="custom-amount"><span>{ar ? 'مبلغ مخصص' : 'Custom amount'}</span><div><span>KWD</span><input disabled={quoteMutation.isPending} data-testid="input-custom-amount" aria-label={ar ? 'مبلغ مخصص بالدينار الكويتي' : 'Custom amount in KWD'} type="number" min="0.250" max="1000" step="0.001" placeholder="0.000" value={custom} onChange={(e)=>{setCustom(e.target.value);clearReview()}}/></div></label>
+        <div className="rating-row"><div><strong>{ar ? 'التقييم (اختياري)' : 'Rating (optional)'}</strong></div><div className="rating-stars">{[1,2,3,4,5].map((n)=><button disabled={quoteMutation.isPending} data-testid={`button-rating-${n}`} aria-label={`${n} stars`} aria-pressed={n<= (rating ?? 0)} type="button" onClick={()=>{setRating(rating===n?null:n);clearReview()}} key={n}><Star size={20} fill={n<=(rating ?? 0)?'currentColor':'none'}/></button>)}</div></div>
+        {displayedAmount !== undefined && displayedUsdCents !== undefined && displayedRate && displayedRateSource && displayedRateUpdatedAt && <section className="conversion-review" aria-live="polite">
+          <div className="conversion-row"><span>{ar ? 'بقشيش العامل' : 'Worker tip'}</span><strong>{money(displayedAmount)}</strong></div>
+          <div className="conversion-row conversion-pay"><span>{ar ? 'المبلغ عند الدفع' : 'Amount at Stripe'}</span><strong>{usdMoney(displayedUsdCents)}</strong></div>
+          <p>1 KWD = {usdMoney(Math.round(Number(displayedRate) * 100))} USD</p>
+          <small>{ar ? 'سعر التحويل حسب' : 'Rate by'} <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">{displayedRateSource}</a> · {new Date(displayedRateUpdatedAt).toLocaleDateString(ar ? 'ar-KW' : 'en-KW')}</small>
+        </section>}
+        <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع تجريبي آمن عبر Stripe · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div>
         {notice && <div className="form-notice" role="alert">{notice}</div>}
-        <PillButton type="submit" className="submit-tip" disabled={checkout.isPending}>{checkout.isPending ? 'Opening secure checkout…' : <>Pay {money(amountFils)} <ArrowUpRight size={17}/></>}</PillButton>
+        <PillButton type="submit" className="submit-tip" disabled={quoteMutation.isPending || checkout.isPending}>{quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} <ArrowUpRight size={17}/></PillButton>
       </form>
     </>}
   </div></main></LocalizedTree>;
@@ -426,7 +529,7 @@ function ConfirmationPage() {
   const state = status?.status || (demoMode ? 'demo' : 'pending');
   const title = state === 'succeeded' ? 'Your thank you is on its way.' : state === 'demo' ? 'A demo tip is ready.' : state === 'failed' ? 'This payment didn’t go through.' : state === 'cancelled' ? 'Checkout was cancelled.' : 'Checking your tip…';
   const copy = state === 'demo' ? 'This is a demonstration only. No payment was made or charged.' : state === 'succeeded' ? 'Your appreciation has been received. Thank you for making someone’s day.' : state === 'pending' ? 'We’re waiting for a confirmed payment status. This page will update automatically.' : 'No charge was confirmed. You can safely try again.';
-  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">We couldn’t verify the payment status. <button onClick={()=>void refetch()}>Check again</button></div>}{status && <div className="outcome-details"><span>Recipient</span><strong>{status.workerName || sessionStorage.getItem('sanad-tip-worker') || 'SANAD worker'}</strong><span>Amount</span><strong>{money(status.amountFils)}</strong></div>}{status?.isDemo && <div className="demo-callout">DEMO — this status does not represent a real charge.</div>}<Link href="/" className="cta-primary centered">{state === 'failed' || state === 'cancelled' ? 'Return to SANAD' : 'Back to SANAD'} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
+  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">We couldn’t verify the payment status. <button onClick={()=>void refetch()}>Check again</button></div>}{status && <div className="outcome-details"><span>Recipient</span><strong>{status.workerName || sessionStorage.getItem('sanad-tip-worker') || 'SANAD worker'}</strong><span>Worker tip</span><strong>{money(status.amountFils)}</strong>{typeof status.usdAmountCents === 'number' && <><span>Stripe checkout</span><strong>{usdMoney(status.usdAmountCents)}</strong></>}</div>}{status?.isDemo && <div className="demo-callout">DEMO — this status does not represent a real charge.</div>}<Link href="/" className="cta-primary centered">{state === 'failed' || state === 'cancelled' ? 'Return to SANAD' : 'Back to SANAD'} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
 }
 
 const workerNav = [

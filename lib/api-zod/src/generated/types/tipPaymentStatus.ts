@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TipPaymentStatusCurrency } from './tipPaymentStatusCurrency';
+import type { TipPaymentStatusPaymentCurrency } from './tipPaymentStatusPaymentCurrency';
 import type { TipPaymentStatusStatus } from './tipPaymentStatusStatus';
 
 export interface TipPaymentStatus {
@@ -16,4 +17,9 @@ export interface TipPaymentStatus {
   isDemo: boolean;
   workerName?: string;
   companyName?: string;
+  usdAmountCents?: number;
+  paymentCurrency?: TipPaymentStatusPaymentCurrency;
+  kwdToUsdRate?: string;
+  rateSource?: string;
+  rateUpdatedAt?: Date;
 }

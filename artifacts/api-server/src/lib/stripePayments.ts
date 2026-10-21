@@ -11,19 +11,6 @@ type StripeApiErrorBody = {
   };
 };
 
-type StripeProduct = {
-  id: string;
-  metadata?: Record<string, string>;
-};
-
-type StripePrice = {
-  id: string;
-  active: boolean;
-  currency: string;
-  lookup_key: string | null;
-  unit_amount: number | null;
-};
-
 type StripeCheckoutSession = {
   id: string;
   url: string | null;
@@ -37,24 +24,15 @@ type StripeCheckoutSession = {
   payment_intent: string | { id: string } | null;
 };
 
-type StripeAccount = {
-  charges_enabled: boolean;
-};
-
 type StripeBalance = {
   livemode: boolean;
-};
-
-type StripeList<T> = {
-  data: T[];
-  has_more: boolean;
 };
 
 export class StripePaymentError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code?: "live_charges_disabled" | "unsupported_currency",
+    readonly code?: "live_charges_disabled" | "unsupported_currency" | "live_mode_forbidden",
   ) {
     super(message);
     this.name = "StripePaymentError";
@@ -62,18 +40,15 @@ export class StripePaymentError extends Error {
 }
 
 async function verifyStripeAccountCanAcceptTips(): Promise<boolean> {
-  const [account, balance] = await Promise.all([
-    stripeRequest<StripeAccount>("/v1/account"),
-    stripeRequest<StripeBalance>("/v1/balance"),
-  ]);
-  if (balance.livemode && !account.charges_enabled) {
+  const balance = await stripeRequest<StripeBalance>("/v1/balance");
+  if (balance.livemode) {
     throw new StripePaymentError(
-      "Live Stripe payments are not enabled for this account",
+      "SANAD is configured for test payments only",
       409,
-      "live_charges_disabled",
+      "live_mode_forbidden",
     );
   }
-  return balance.livemode;
+  return false;
 }
 
 async function stripeRequest<T>(
@@ -141,80 +116,18 @@ function publicAppOrigin(): string {
   return origin.replace(/\/$/, "");
 }
 
-async function findOrCreateTipProduct(): Promise<string> {
-  const query = new URLSearchParams({
-    query: "metadata['sanad_app']:'true' AND active:'true'",
-    limit: "10",
-  });
-  const products = await stripeRequest<StripeList<StripeProduct>>(
-    `/v1/products/search?${query.toString()}`,
-  );
-  const existing = products.data.find(
-    (product) => product.metadata?.sanad_app === "true",
-  );
-  if (existing) return existing.id;
-
-  const form = new URLSearchParams({
-    name: "SANAD Guest Tip",
-    description: "A guest tip sent through SANAD.",
-    active: "true",
-    "metadata[sanad_app]": "true",
-  });
-  const product = await stripeRequest<StripeProduct>("/v1/products", {
-    method: "POST",
-    form,
-    idempotencyKey: "sanad-tip-product-v1",
-  });
-  return product.id;
-}
-
-async function findOrCreateTipPrice(
-  productId: string,
-  amountFils: number,
-): Promise<StripePrice> {
-  const lookupKey = `sanad_tip_kwd_${amountFils}`;
-  const params = new URLSearchParams();
-  params.append("lookup_keys[]", lookupKey);
-  params.set("active", "true");
-  params.set("limit", "1");
-
-  const prices = await stripeRequest<StripeList<StripePrice>>(
-    `/v1/prices?${params.toString()}`,
-  );
-  const existing = prices.data.find(
-    (price) =>
-      price.active &&
-      price.currency.toLowerCase() === "kwd" &&
-      price.unit_amount === amountFils &&
-      price.lookup_key === lookupKey,
-  );
-  if (existing) return existing;
-
-  const form = new URLSearchParams({
-    product: productId,
-    currency: "kwd",
-    unit_amount: String(amountFils),
-    lookup_key: lookupKey,
-    "metadata[sanad_app]": "true",
-    "metadata[amount_fils]": String(amountFils),
-  });
-  return stripeRequest<StripePrice>("/v1/prices", {
-    method: "POST",
-    form,
-    idempotencyKey: `sanad-tip-price-${amountFils}-v1`,
-  });
-}
-
 export async function createTipCheckoutSession(input: {
   tipId: string;
   workerId: string;
   workerSlug: string;
-  workerName: string;
   amountFils: number;
+  usdAmountCents: number;
+  kwdToUsdRate: string;
+  rateSource: string;
+  rateUpdatedAt: string;
+  checkoutQuoteId: string;
 }): Promise<StripeCheckoutSession> {
   const liveMode = await verifyStripeAccountCanAcceptTips();
-  const productId = await findOrCreateTipProduct();
-  const price = await findOrCreateTipPrice(productId, input.amountFils);
   const origin = publicAppOrigin();
   const successUrl = new URL("/tip-confirmation", origin);
   successUrl.searchParams.set("tipId", input.tipId);
@@ -225,11 +138,19 @@ export async function createTipCheckoutSession(input: {
     origin,
   );
   cancelUrl.searchParams.set("checkout", "cancelled");
+  cancelUrl.searchParams.set("tipId", input.tipId);
 
+  const rateUpdatedAtSeconds = Math.floor(
+    new Date(input.rateUpdatedAt).getTime() / 1000,
+  );
   const form = new URLSearchParams({
     mode: "payment",
-    "line_items[0][price]": price.id,
     "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": "usd",
+    "line_items[0][price_data][unit_amount]": String(input.usdAmountCents),
+    "line_items[0][price_data][product_data][name]": "SANAD Guest Tip",
+    "line_items[0][price_data][product_data][description]":
+      `KWD ${(input.amountFils / 1000).toFixed(3)} tip · rate ${input.kwdToUsdRate} USD per KWD`,
     "payment_method_types[0]": "card",
     client_reference_id: input.tipId,
     success_url: successUrl.toString(),
@@ -238,11 +159,22 @@ export async function createTipCheckoutSession(input: {
     "metadata[tip_id]": input.tipId,
     "metadata[worker_id]": input.workerId,
     "metadata[worker_slug]": input.workerSlug,
-    "metadata[amount_fils]": String(input.amountFils),
-    "payment_intent_data[description]": `SANAD tip for ${input.workerName}`,
+    "metadata[kwd_amount_fils]": String(input.amountFils),
+    "metadata[usd_amount_cents]": String(input.usdAmountCents),
+    "metadata[kwd_to_usd_rate]": input.kwdToUsdRate,
+    "metadata[rate_source]": input.rateSource,
+    "metadata[rate_updated_at]": String(rateUpdatedAtSeconds),
+    "metadata[checkout_quote_id]": input.checkoutQuoteId,
+    "payment_intent_data[description]": "SANAD Guest Tip",
     "payment_intent_data[metadata][tip_id]": input.tipId,
     "payment_intent_data[metadata][worker_id]": input.workerId,
     "payment_intent_data[metadata][worker_slug]": input.workerSlug,
+    "payment_intent_data[metadata][kwd_amount_fils]": String(input.amountFils),
+    "payment_intent_data[metadata][usd_amount_cents]": String(input.usdAmountCents),
+    "payment_intent_data[metadata][kwd_to_usd_rate]": input.kwdToUsdRate,
+    "payment_intent_data[metadata][rate_source]": input.rateSource,
+    "payment_intent_data[metadata][rate_updated_at]": String(rateUpdatedAtSeconds),
+    "payment_intent_data[metadata][checkout_quote_id]": input.checkoutQuoteId,
   });
 
   const session = await stripeRequest<StripeCheckoutSession>(
@@ -250,7 +182,7 @@ export async function createTipCheckoutSession(input: {
     {
       method: "POST",
       form,
-      idempotencyKey: `sanad-tip-checkout-${input.tipId}`,
+      idempotencyKey: `sanad-tip-checkout-${input.tipId}-${input.checkoutQuoteId}`,
     },
   );
   if (session.livemode !== liveMode) {

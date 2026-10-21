@@ -16,6 +16,7 @@ import {
   createCompanyMembership,
   createPayout,
   createTip,
+  createTipIdempotently,
   createWorker,
   getCompanyById,
   getCompanyByNameAndDemo,
@@ -23,6 +24,7 @@ import {
   getPayoutById,
   getPublicWorker,
   getTipById,
+  getTipByCheckoutRequestId,
   getTipWithNames,
   getWorkerByClerkUserId,
   getWorkerById,
@@ -37,9 +39,19 @@ import {
   updatePayoutStatus,
   updateTip,
   updateWorker,
+  workerPayoutRows,
   workerTransactionRows,
   writeAudit,
 } from "../lib/mongoStore";
+import {
+  convertKwdFilsToUsdCents,
+  createTipQuoteToken,
+  getCurrentKwdUsdRate,
+  TIP_QUOTE_TTL_MS,
+  TIP_RATE_SOURCE,
+  TipQuoteError,
+  verifyTipQuoteToken,
+} from "../lib/tipQuote";
 import {
   generateTemporaryPassword,
   getActiveWorkerForRequest,
@@ -57,6 +69,8 @@ import {
   CreateCompanyProfileResponse,
   CreateTipCheckoutBody,
   CreateTipCheckoutResponse,
+  CreateTipQuoteBody,
+  CreateTipQuoteResponse,
   GetCompanyDashboardResponse,
   GetCompanyReportQueryParams,
   GetCompanyReportResponse,
@@ -243,33 +257,35 @@ function toPayout(row: {
 
 async function seedDemoCompany(companyId: string, actorId: string) {
   if (!isDevelopment) return;
-  const existing = await db
-    .select({ id: workersTable.id })
-    .from(workersTable)
-    .where(eq(workersTable.companyId, companyId))
-    .limit(1);
-  if (existing.length) return;
+  if ((await getWorkersByCompany(companyId)).length) return;
 
   const demoWorkers = [
     { name: "Ahmed Al-Mutairi", arabicName: "أحمد المطيري", role: "Service host", branch: "Salmiya" },
     { name: "Noor Al-Sabah", arabicName: "نور الصباح", role: "Barista", branch: "Sharq" },
     { name: "Sami Rahman", arabicName: "سامي رحمن", role: "Guest services", branch: "Salmiya" },
   ];
-  const workers = await db
-    .insert(workersTable)
-    .values(
-      demoWorkers.map((item) => ({
+  const workers = await Promise.all(
+    demoWorkers.map((item) =>
+      createWorker({
+        id: randomUUID(),
         companyId,
+        clerkUserId: null,
+        clerkInvitationId: null,
         slug: `${item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${randomUUID().slice(0, 6)}`,
         name: item.name,
         arabicName: item.arabicName,
+        email: null,
+        phoneNumber: null,
+        workerPasswordHash: null,
+        passwordChangeRequired: false,
         role: item.role,
         branch: item.branch,
-        status: "active" as const,
+        photoUrl: null,
+        status: "active",
         isDemo: true,
-      })),
-    )
-    .returning();
+      }),
+    ),
+  );
 
   const values = [250, 500, 500, 1000, 2000, 750, 1000, 250, 1500, 500, 2000, 1000];
   const now = Date.now();
@@ -278,15 +294,21 @@ async function seedDemoCompany(companyId: string, actorId: string) {
       reference: `demo_${randomUUID()}`,
       workerId: worker.id,
       amountFils,
+      processorFeeFils: 0,
+      refundedAmountFils: 0,
       currency: "KWD",
       status: "demo" as const,
       rating: [4, 5, 5, 5, 4, 5][itemIndex] ?? 5,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
       isDemo: true,
       createdAt: new Date(now - (itemIndex + workerIndex * 2) * 86400000),
     })),
   );
-  await db.insert(tipsTable).values(demoTips);
-  await db.insert(payoutsTable).values([
+  await Promise.all(
+    demoTips.map((tip) => createTip({ id: randomUUID(), ...tip })),
+  );
+  await Promise.all([
     {
       companyId,
       workerId: workers[0]!.id,
@@ -307,108 +329,84 @@ async function seedDemoCompany(companyId: string, actorId: string) {
       recordedByClerkUserId: actorId,
       isDemo: true,
     },
-  ]);
-}
-
-async function companyTransactionRows(companyId: string, limit = 1000) {
-  return db
-    .select({
-      id: tipsTable.id,
-      workerId: tipsTable.workerId,
-      workerName: workersTable.name,
-      amountFils: tipsTable.amountFils,
-      currency: tipsTable.currency,
-      status: tipsTable.status,
-      rating: tipsTable.rating,
-      createdAt: tipsTable.createdAt,
-      isDemo: tipsTable.isDemo,
-    })
-    .from(tipsTable)
-    .innerJoin(workersTable, eq(tipsTable.workerId, workersTable.id))
-    .where(eq(workersTable.companyId, companyId))
-    .orderBy(desc(tipsTable.createdAt))
-    .limit(limit);
-}
-
-async function companyPayoutRows(companyId: string, workerIds?: string[]) {
-  const filters = [eq(payoutsTable.companyId, companyId)];
-  if (workerIds) filters.push(inArray(payoutsTable.workerId, workerIds));
-  return db
-    .select({
-      id: payoutsTable.id,
-      workerId: payoutsTable.workerId,
-      workerName: workersTable.name,
-      amountFils: payoutsTable.amountFils,
-      month: payoutsTable.month,
-      status: payoutsTable.status,
-      recordedAt: payoutsTable.recordedAt,
-      note: payoutsTable.note,
-      isDemo: payoutsTable.isDemo,
-    })
-    .from(payoutsTable)
-    .innerJoin(workersTable, eq(payoutsTable.workerId, workersTable.id))
-    .where(and(...filters))
-    .orderBy(desc(payoutsTable.recordedAt));
+  ].map((payout) => createPayout({
+    companyId: payout.companyId,
+    workerId: payout.workerId,
+    amountFils: payout.amountFils,
+    month: payout.month,
+    status: payout.status as "pending" | "paid",
+    note: payout.note,
+    recordedByClerkUserId: payout.recordedByClerkUserId,
+    isDemo: payout.isDemo,
+  })));
 }
 
 async function ensureLandingDemoWorker() {
   if (!isDevelopment) return;
   const slug = "ahmed-almutairi";
-  const [existing] = await db
-    .select({ id: workersTable.id })
-    .from(workersTable)
-    .where(eq(workersTable.slug, slug))
-    .limit(1);
+  const existing = await getWorkerBySlug(slug);
   if (existing) return;
 
-  let [company] = await db
-    .select({ id: companiesTable.id })
-    .from(companiesTable)
-    .where(and(eq(companiesTable.name, "SANAD Demo"), eq(companiesTable.isDemo, true)))
-    .limit(1);
+  let company = await getCompanyByNameAndDemo("SANAD Demo", true);
   if (!company) {
-    [company] = await db
-      .insert(companiesTable)
-      .values({ name: "SANAD Demo", isDemo: true })
-      .returning({ id: companiesTable.id });
+    company = await createCompany({
+      name: "SANAD Demo",
+      registrationNumber: null,
+      contactEmail: null,
+      isDemo: true,
+    });
   }
   if (!company) return;
-  const [worker] = await db
-    .insert(workersTable)
-    .values({
+  const worker = await createWorker({
+      id: randomUUID(),
       companyId: company.id,
+      clerkUserId: null,
+      clerkInvitationId: null,
       slug,
       name: "Ahmed Al-Mutairi",
       arabicName: "أحمد المطيري",
+      email: null,
+      phoneNumber: null,
+      workerPasswordHash: null,
+      passwordChangeRequired: false,
       role: "Service host",
       branch: "Salmiya",
+      photoUrl: null,
       status: "active",
       isDemo: true,
-    })
-    .onConflictDoNothing()
-    .returning({ id: workersTable.id });
+    });
   if (!worker) return;
-  await db.insert(tipsTable).values([
+  await Promise.all([
     {
+      id: randomUUID(),
       reference: `demo_${randomUUID()}`,
       workerId: worker.id,
       amountFils: 1000,
+      processorFeeFils: 0,
+      refundedAmountFils: 0,
       currency: "KWD",
-      status: "demo",
+      status: "demo" as const,
       rating: 5,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
       isDemo: true,
     },
     {
+      id: randomUUID(),
       reference: `demo_${randomUUID()}`,
       workerId: worker.id,
       amountFils: 2000,
+      processorFeeFils: 0,
+      refundedAmountFils: 0,
       currency: "KWD",
-      status: "demo",
+      status: "demo" as const,
       rating: 5,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
       isDemo: true,
       createdAt: new Date(Date.now() - 86400000),
     },
-  ]);
+  ].map((tip) => createTip(tip)));
 }
 
 router.get("/public/workers/:slug", async (req, res): Promise<void> => {
@@ -417,38 +415,10 @@ router.get("/public/workers/:slug", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  let [row] = await db
-    .select({
-      id: workersTable.id,
-      slug: workersTable.slug,
-      name: workersTable.name,
-      arabicName: workersTable.arabicName,
-      role: workersTable.role,
-      branch: workersTable.branch,
-      photoUrl: workersTable.photoUrl,
-      companyName: companiesTable.name,
-    })
-    .from(workersTable)
-    .innerJoin(companiesTable, eq(workersTable.companyId, companiesTable.id))
-    .where(and(eq(workersTable.slug, params.data.slug), eq(workersTable.status, "active")))
-    .limit(1);
+  let row = await getPublicWorker(params.data.slug);
   if (!row && params.data.slug === "ahmed-almutairi" && isDevelopment) {
     await ensureLandingDemoWorker();
-    [row] = await db
-      .select({
-        id: workersTable.id,
-        slug: workersTable.slug,
-        name: workersTable.name,
-        arabicName: workersTable.arabicName,
-        role: workersTable.role,
-        branch: workersTable.branch,
-        photoUrl: workersTable.photoUrl,
-        companyName: companiesTable.name,
-      })
-      .from(workersTable)
-      .innerJoin(companiesTable, eq(workersTable.companyId, companiesTable.id))
-      .where(and(eq(workersTable.slug, params.data.slug), eq(workersTable.status, "active")))
-      .limit(1);
+    row = await getPublicWorker(params.data.slug);
   }
   if (!row) {
     res.status(404).json({ error: "Worker not found" });
@@ -457,102 +427,361 @@ router.get("/public/workers/:slug", async (req, res): Promise<void> => {
   res.json(GetPublicWorkerResponse.parse(row));
 });
 
+router.post("/tips/quote", async (req, res): Promise<void> => {
+  const body = CreateTipQuoteBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const worker = await getWorkerBySlug(body.data.workerSlug);
+  if (!worker || worker.status !== "active") {
+    res.status(404).json({ error: "Worker not found" });
+    return;
+  }
+
+  try {
+    const rate = await getCurrentKwdUsdRate();
+    const quotedAt = new Date();
+    const expiresAt = new Date(quotedAt.getTime() + TIP_QUOTE_TTL_MS);
+    const amountFils = body.data.amountFils;
+    const rating = body.data.rating ?? null;
+    const usdAmountCents = convertKwdFilsToUsdCents(amountFils, rate.rate);
+    const { quoteToken } = createTipQuoteToken(
+      {
+        workerId: worker.id,
+        workerSlug: worker.slug,
+        amountFils,
+        rating,
+        usdAmountCents,
+        kwdToUsdRate: rate.rate,
+        rateSource: TIP_RATE_SOURCE,
+        rateUpdatedAt: rate.updatedAt,
+        quotedAt: quotedAt.toISOString(),
+        expiresAt: expiresAt.getTime(),
+      },
+      process.env.SESSION_SECRET ?? "",
+    );
+
+    res.json(
+      CreateTipQuoteResponse.parse({
+        workerSlug: worker.slug,
+        amountFils,
+        currency: "KWD",
+        usdAmountCents,
+        paymentCurrency: "USD",
+        kwdToUsdRate: rate.rate,
+        rateSource: TIP_RATE_SOURCE,
+        rateUpdatedAt: new Date(rate.updatedAt),
+        quotedAt,
+        expiresAt,
+        quoteToken,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof TipQuoteError) {
+      const status =
+        error.code === "quote_secret_missing"
+          ? 503
+          : error.code === "rate_unavailable"
+            ? 502
+            : 400;
+      req.log.warn({ code: error.code }, "Could not create SANAD tip quote");
+      res.status(status).json({
+        error:
+          error.code === "quote_secret_missing"
+            ? "Currency conversion is not configured. No payment was made."
+            : "Currency conversion is unavailable. No payment was made.",
+      });
+      return;
+    }
+    req.log.error(
+      { errorType: error instanceof Error ? error.name : "UnknownError" },
+      "Could not create SANAD tip quote",
+    );
+    res.status(502).json({
+      error: "Currency conversion is unavailable. No payment was made.",
+    });
+  }
+});
+
 router.post("/tips/checkout", async (req, res): Promise<void> => {
   const body = CreateTipCheckoutBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [worker] = await db
-    .select({
-      id: workersTable.id,
-      slug: workersTable.slug,
-      name: workersTable.name,
-      status: workersTable.status,
-      isDemo: workersTable.isDemo,
-    })
-    .from(workersTable)
-    .where(eq(workersTable.slug, body.data.workerSlug))
-    .limit(1);
+  const worker = await getWorkerBySlug(body.data.workerSlug);
   if (!worker || worker.status !== "active") {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
 
-  const tipId = randomUUID();
-  const [tip] = await db
-    .insert(tipsTable)
-    .values({
-      id: tipId,
-      reference: `sanad_${tipId}`,
-      workerId: worker.id,
-      amountFils: body.data.amountFils,
-      currency: "KWD",
-      rating: body.data.rating ?? null,
-      status: "pending",
-      isDemo: false,
-    })
-    .returning({ id: tipsTable.id });
-  if (!tip) {
-    res.status(500).json({ error: "Could not create the tip record" });
+  let quote;
+  try {
+    quote = verifyTipQuoteToken(
+      body.data.quoteToken,
+      process.env.SESSION_SECRET ?? "",
+    );
+  } catch (error) {
+    if (error instanceof TipQuoteError) {
+      const status =
+        error.code === "quote_secret_missing"
+          ? 503
+          : error.code === "expired_quote"
+            ? 409
+            : 400;
+      res.status(status).json({
+        error:
+          error.code === "expired_quote"
+            ? "This conversion quote expired. Review the amount again."
+            : "The conversion quote is invalid. Please review the amount again.",
+      });
+      return;
+    }
+    res.status(400).json({ error: "The conversion quote is invalid." });
     return;
   }
+
+  const requestedRating = body.data.rating ?? null;
+  if (
+    quote.workerId !== worker.id ||
+    quote.workerSlug !== worker.slug ||
+    quote.amountFils !== body.data.amountFils ||
+    quote.rating !== requestedRating
+  ) {
+    res.status(400).json({ error: "The conversion quote does not match this tip." });
+    return;
+  }
+
+  const responseForTip = (
+    tip: Awaited<ReturnType<typeof getTipById>> & {},
+    checkoutUrl: string | null,
+    message: string,
+  ) =>
+    CreateTipCheckoutResponse.parse({
+      tipId: tip.id,
+      paymentMode: "stripe",
+      status:
+        tip.status === "succeeded" || tip.status === "demo"
+          ? "demo"
+          : "pending",
+      checkoutUrl,
+      message,
+      amountFils: tip.amountFils,
+      currency: "KWD",
+      usdAmountCents: tip.usdAmountCents,
+      paymentCurrency: "USD",
+      kwdToUsdRate: tip.kwdToUsdRate,
+      rateSource: tip.rateSource,
+      rateUpdatedAt: tip.rateUpdatedAt,
+    });
+
+  let tip = await getTipByCheckoutRequestId(body.data.requestId);
+  if (
+    tip &&
+    (tip.workerId !== worker.id ||
+      tip.amountFils !== body.data.amountFils ||
+      tip.rating !== requestedRating)
+  ) {
+    res.status(409).json({
+      error: "This checkout request was already used for a different tip.",
+    });
+    return;
+  }
+
+  if (!tip) {
+    const id = randomUUID();
+    tip = await createTipIdempotently({
+      id,
+      checkoutRequestId: body.data.requestId,
+      checkoutQuoteId: quote.quoteId,
+      reference: `sanad_${id}`,
+      workerId: worker.id,
+      amountFils: quote.amountFils,
+      processorFeeFils: 0,
+      refundedAmountFils: 0,
+      currency: "KWD",
+      rating: quote.rating,
+      status: "pending",
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
+      isDemo: false,
+      usdAmountCents: quote.usdAmountCents,
+      paymentCurrency: "USD",
+      kwdToUsdRate: quote.kwdToUsdRate,
+      rateSource: quote.rateSource,
+      rateUpdatedAt: new Date(quote.rateUpdatedAt),
+      quotedAt: new Date(quote.quotedAt),
+    });
+    if (
+      tip.workerId !== worker.id ||
+      tip.amountFils !== body.data.amountFils ||
+      tip.rating !== requestedRating
+    ) {
+      res.status(409).json({
+        error: "This checkout request was already used for a different tip.",
+      });
+      return;
+    }
+  }
+
+  if (tip.status === "succeeded" || tip.status === "demo") {
+    res.json(responseForTip(tip, null, "This tip is already complete."));
+    return;
+  }
+
+  if (
+    typeof tip.usdAmountCents !== "number" ||
+    tip.paymentCurrency !== "USD" ||
+    !tip.kwdToUsdRate ||
+    !tip.rateSource ||
+    !tip.rateUpdatedAt
+  ) {
+    res.status(409).json({ error: "The conversion quote is incomplete." });
+    return;
+  }
+
+  if (tip.status === "pending" && tip.stripeCheckoutSessionId) {
+    let existingSession;
+    try {
+      existingSession = await getStripeCheckoutSession(
+        tip.stripeCheckoutSessionId,
+      );
+    } catch (error) {
+      req.log.error(
+        {
+          tipId: tip.id,
+          stripeStatus:
+            error instanceof StripePaymentError ? error.status : undefined,
+        },
+        "Could not retrieve existing SANAD checkout",
+      );
+      res.status(503).json({ error: "Checkout is temporarily unavailable." });
+      return;
+    }
+
+    const existingSessionMatches =
+      existingSession.id === tip.stripeCheckoutSessionId &&
+      existingSession.client_reference_id === tip.id &&
+      existingSession.metadata?.tip_id === tip.id &&
+      existingSession.amount_total === tip.usdAmountCents &&
+      existingSession.currency?.toLowerCase() === "usd";
+    if (!existingSessionMatches) {
+      req.log.error({ tipId: tip.id }, "Stripe session did not match SANAD tip");
+      res.status(502).json({ error: "Checkout could not be verified." });
+      return;
+    }
+
+    if (existingSession.status === "open" && existingSession.url) {
+      res.json(
+        responseForTip(
+          tip,
+          existingSession.url,
+          "Your secure checkout is ready. No payment is made until you confirm in Stripe.",
+        ),
+      );
+      return;
+    }
+    if (existingSession.status === "complete") {
+      res.json(
+        responseForTip(
+          tip,
+          null,
+          "Checkout was already submitted. Checking payment status.",
+        ),
+      );
+      return;
+    }
+    if (existingSession.status === "expired") {
+      await updateTip(
+        tip.id,
+        { status: "cancelled", isDemo: !existingSession.livemode },
+        { status: "pending", stripeCheckoutSessionId: existingSession.id },
+      );
+      tip = { ...tip, status: "cancelled" };
+    }
+  }
+
+  const preparedTip = await updateTip(
+    tip.id,
+    {
+      status: "pending",
+      isDemo: false,
+      reference: `sanad_${tip.id}`,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
+      checkoutQuoteId: quote.quoteId,
+      usdAmountCents: quote.usdAmountCents,
+      paymentCurrency: "USD",
+      kwdToUsdRate: quote.kwdToUsdRate,
+      rateSource: quote.rateSource,
+      rateUpdatedAt: new Date(quote.rateUpdatedAt),
+      quotedAt: new Date(quote.quotedAt),
+    },
+    { checkoutRequestId: body.data.requestId },
+  );
+  if (!preparedTip) {
+    res.status(500).json({ error: "Could not prepare the tip record." });
+    return;
+  }
+  tip = preparedTip;
 
   try {
     const session = await createTipCheckoutSession({
       tipId: tip.id,
       workerId: worker.id,
       workerSlug: worker.slug,
-      workerName: worker.name,
-      amountFils: body.data.amountFils,
+      amountFils: tip.amountFils,
+      usdAmountCents: quote.usdAmountCents,
+      kwdToUsdRate: quote.kwdToUsdRate,
+      rateSource: quote.rateSource,
+      rateUpdatedAt: quote.rateUpdatedAt,
+      checkoutQuoteId: quote.quoteId,
     });
     if (!session.id || !session.url) {
       throw new Error("Stripe did not return a checkout URL");
     }
 
-    await db
-      .update(tipsTable)
-      .set({
+    const updatedTip = await updateTip(
+      tip.id,
+      {
         reference: session.id,
         stripeCheckoutSessionId: session.id,
         isDemo: !session.livemode,
-      })
-      .where(eq(tipsTable.id, tip.id));
+      },
+      { status: "pending", checkoutRequestId: body.data.requestId },
+    );
+    if (!updatedTip) {
+      res.status(409).json({ error: "Checkout could not be linked to this tip." });
+      return;
+    }
 
     res.json(
-      CreateTipCheckoutResponse.parse({
-        tipId: tip.id,
-        paymentMode: "stripe",
-        status: "pending",
-        checkoutUrl: session.url,
-        message: session.livemode
-          ? "Stripe checkout is ready. The payment settles to SANAD's connected Stripe account."
-          : "Stripe test mode is active. No real charge will be made.",
-      }),
+      responseForTip(
+        updatedTip,
+        session.url,
+        "Stripe test checkout is ready. No real charge will be made.",
+      ),
     );
   } catch (error) {
-    const liveAccountNeedsSetup =
+    const liveModeBlocked =
       error instanceof StripePaymentError &&
-      error.code === "live_charges_disabled";
-    const currencyUnsupported =
-      error instanceof StripePaymentError &&
-      error.code === "unsupported_currency";
-    await db
-      .update(tipsTable)
-      .set({ status: "failed", isDemo: worker.isDemo })
-      .where(and(eq(tipsTable.id, tip.id), eq(tipsTable.status, "pending")));
-    logger.error(
+      error.code === "live_mode_forbidden";
+    await updateTip(
+      tip.id,
+      { status: "failed", isDemo: worker.isDemo },
+      { status: "pending" },
+    );
+    req.log.error(
       {
         tipId: tip.id,
         stripeStatus: error instanceof StripePaymentError ? error.status : undefined,
       },
       "Could not create SANAD Stripe checkout",
     );
-    res.status(liveAccountNeedsSetup ? 503 : currencyUnsupported ? 422 : 502).json({
-      error: liveAccountNeedsSetup
-        ? "Live Stripe payments are not enabled for this account. No payment was made."
-        : currencyUnsupported
-          ? "This Stripe account cannot accept KWD yet. Add a KWD bank account in Stripe settings. No payment was made."
+    res.status(liveModeBlocked ? 503 : 502).json({
+      error: liveModeBlocked
+        ? "SANAD accepts test payments only. No payment was made."
         : "Stripe checkout is unavailable. No payment was made.",
     });
   }
@@ -564,22 +793,7 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [row] = await db
-    .select({
-      id: tipsTable.id,
-      status: tipsTable.status,
-      amountFils: tipsTable.amountFils,
-      currency: tipsTable.currency,
-      isDemo: tipsTable.isDemo,
-      stripeCheckoutSessionId: tipsTable.stripeCheckoutSessionId,
-      workerName: workersTable.name,
-      companyName: companiesTable.name,
-    })
-    .from(tipsTable)
-    .innerJoin(workersTable, eq(tipsTable.workerId, workersTable.id))
-    .innerJoin(companiesTable, eq(workersTable.companyId, companiesTable.id))
-    .where(eq(tipsTable.id, params.data.tipId))
-    .limit(1);
+  const row = await getTipWithNames(params.data.tipId);
   if (!row) {
     res.status(404).json({ error: "Tip not found" });
     return;
@@ -607,13 +821,26 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
     const sessionMatchesTip =
       session.id === row.stripeCheckoutSessionId &&
       session.client_reference_id === row.id &&
-      session.metadata?.tip_id === row.id;
+      session.metadata?.tip_id === row.id &&
+      session.metadata?.worker_id === row.workerId &&
+      session.metadata?.checkout_quote_id === row.checkoutQuoteId;
     const paidAmountMatches =
-      session.amount_total === row.amountFils &&
-      session.currency?.toUpperCase() === row.currency.toUpperCase();
+      session.amount_total === row.usdAmountCents &&
+      session.currency?.toUpperCase() === "USD" &&
+      session.metadata?.kwd_amount_fils === String(row.amountFils) &&
+      session.metadata?.usd_amount_cents === String(row.usdAmountCents) &&
+      session.metadata?.kwd_to_usd_rate === row.kwdToUsdRate &&
+      session.metadata?.rate_source === row.rateSource &&
+      session.metadata?.rate_updated_at ===
+        String(Math.floor((row.rateUpdatedAt?.getTime() ?? 0) / 1000));
 
     if (!sessionMatchesTip) {
       logger.error({ tipId: row.id }, "Stripe session did not match SANAD tip");
+      res.status(502).json({ error: "Payment status could not be verified" });
+      return;
+    }
+    if (session.livemode) {
+      logger.error({ tipId: row.id }, "Live-mode Stripe session rejected");
       res.status(502).json({ error: "Payment status could not be verified" });
       return;
     }
@@ -634,22 +861,19 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
         res.status(502).json({ error: "Payment amount could not be verified" });
         return;
       }
-      status = session.livemode ? "succeeded" : "demo";
-      isDemo = !session.livemode;
+      status = "demo";
+      isDemo = true;
     } else if (session.status === "expired") {
       status = "cancelled";
-      isDemo = !session.livemode;
+      isDemo = true;
     }
 
     if (status !== row.status || isDemo !== row.isDemo) {
-      await db
-        .update(tipsTable)
-        .set({
+      await updateTip(row.id, {
           status,
           isDemo,
           stripePaymentIntentId: paymentIntentId,
-        })
-        .where(and(eq(tipsTable.id, row.id), eq(tipsTable.status, "pending")));
+        }, { status: "pending" });
     }
   }
 
@@ -659,6 +883,11 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
       status,
       amountFils: row.amountFils,
       currency: row.currency,
+      usdAmountCents: row.usdAmountCents,
+      paymentCurrency: row.paymentCurrency,
+      kwdToUsdRate: row.kwdToUsdRate,
+      rateSource: row.rateSource,
+      rateUpdatedAt: row.rateUpdatedAt,
       isDemo,
       workerName: row.workerName,
       companyName: row.companyName,
@@ -669,48 +898,15 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
 router.get("/worker/dashboard", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
   if (!worker) return;
-  const [company] = await db
-    .select({ name: companiesTable.name })
-    .from(companiesTable)
-    .where(eq(companiesTable.id, worker.companyId))
-    .limit(1);
-  const [received, paid, monthTips, avgRating] = await Promise.all([
+  const company = await getCompanyById(worker.companyId);
+  const [received, paid, monthTips, averageRating, recent, monthlyRows] = await Promise.all([
     sumTipsForWorkers([worker.id], successfulTipStatuses),
     sumPayoutsForWorkers([worker.id], "paid"),
     sumTipsForWorkers([worker.id], successfulTipStatuses, monthRange(currentMonth())),
-    db
-      .select({ rating: sql<number | null>`avg(${tipsTable.rating})` })
-      .from(tipsTable)
-      .where(and(eq(tipsTable.workerId, worker.id), inArray(tipsTable.status, [...successfulTipStatuses]))),
+    averageRatingForWorker(worker.id, successfulTipStatuses),
+    workerTransactionRows(worker.id, 6),
+    monthlyTipsForWorker(worker.id, successfulTipStatuses),
   ]);
-  const [recent] = await Promise.all([
-    db
-      .select({
-        id: tipsTable.id,
-        workerId: tipsTable.workerId,
-        workerName: workersTable.name,
-        amountFils: tipsTable.amountFils,
-        currency: tipsTable.currency,
-        status: tipsTable.status,
-        rating: tipsTable.rating,
-        createdAt: tipsTable.createdAt,
-        isDemo: tipsTable.isDemo,
-      })
-      .from(tipsTable)
-      .innerJoin(workersTable, eq(tipsTable.workerId, workersTable.id))
-      .where(eq(tipsTable.workerId, worker.id))
-      .orderBy(desc(tipsTable.createdAt))
-      .limit(6),
-  ]);
-  const monthlyRows = await db
-    .select({
-      month: sql<string>`to_char(date_trunc('month', ${tipsTable.createdAt}), 'YYYY-MM')`,
-      amountFils: sql<number>`coalesce(sum(${tipsTable.amountFils}), 0)`,
-    })
-    .from(tipsTable)
-    .where(and(eq(tipsTable.workerId, worker.id), inArray(tipsTable.status, [...successfulTipStatuses])))
-    .groupBy(sql`date_trunc('month', ${tipsTable.createdAt})`)
-    .orderBy(sql`date_trunc('month', ${tipsTable.createdAt})`);
   const totalTipsFils = received;
   const workerData = {
     id: worker.id,
@@ -732,8 +928,8 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
       pendingTipsFils: Math.max(0, received - paid),
       paidTipsFils: paid,
       monthTipsFils: monthTips,
-      averageRating: avgRating[0]?.rating == null ? null : Number(avgRating[0].rating),
-      monthly: monthlyRows.map((row) => ({ month: row.month, amountFils: Number(row.amountFils) })),
+      averageRating,
+      monthly: monthlyRows,
       recentTransactions: recent.map(toTransaction),
       isDemo: worker.isDemo,
     }),
@@ -743,55 +939,21 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
 router.get("/worker/transactions", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
   if (!worker) return;
-  const rows = await db
-    .select({
-      id: tipsTable.id,
-      workerId: tipsTable.workerId,
-      workerName: workersTable.name,
-      amountFils: tipsTable.amountFils,
-      currency: tipsTable.currency,
-      status: tipsTable.status,
-      rating: tipsTable.rating,
-      createdAt: tipsTable.createdAt,
-      isDemo: tipsTable.isDemo,
-    })
-    .from(tipsTable)
-    .innerJoin(workersTable, eq(tipsTable.workerId, workersTable.id))
-    .where(eq(tipsTable.workerId, worker.id))
-    .orderBy(desc(tipsTable.createdAt));
+  const rows = await workerTransactionRows(worker.id);
   res.json(ListWorkerTransactionsResponse.parse(rows.map(toTransaction)));
 });
 
 router.get("/worker/payouts", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
   if (!worker) return;
-  const rows = await db
-    .select({
-      id: payoutsTable.id,
-      workerId: payoutsTable.workerId,
-      workerName: workersTable.name,
-      amountFils: payoutsTable.amountFils,
-      month: payoutsTable.month,
-      status: payoutsTable.status,
-      recordedAt: payoutsTable.recordedAt,
-      note: payoutsTable.note,
-      isDemo: payoutsTable.isDemo,
-    })
-    .from(payoutsTable)
-    .innerJoin(workersTable, eq(payoutsTable.workerId, workersTable.id))
-    .where(eq(payoutsTable.workerId, worker.id))
-    .orderBy(desc(payoutsTable.recordedAt));
+  const rows = await workerPayoutRows(worker.id);
   res.json(ListWorkerPayoutsResponse.parse(rows.map(toPayout)));
 });
 
 router.get("/worker/badge", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
   if (!worker) return;
-  const [company] = await db
-    .select({ name: companiesTable.name })
-    .from(companiesTable)
-    .where(eq(companiesTable.id, worker.companyId))
-    .limit(1);
+  const company = await getCompanyById(worker.companyId);
   res.json(
     GetWorkerBadgeResponse.parse({
       workerId: worker.id,
@@ -820,31 +982,24 @@ router.post("/company/profile", async (req, res): Promise<void> => {
   }
   let company;
   if (existingMembership) {
-    [company] = await db
-      .update(companiesTable)
-      .set({
+    company = await updateCompany(existingMembership.companyId, {
         name: body.data.name.trim(),
         registrationNumber: body.data.registrationNumber ?? null,
         contactEmail: body.data.contactEmail?.toLowerCase() ?? null,
-      })
-      .where(eq(companiesTable.id, existingMembership.companyId))
-      .returning();
+      });
     await writeAudit(company?.id ?? null, userId, "company.profile.updated", "company", company?.id ?? null);
   } else {
-    const [created] = await db
-      .insert(companiesTable)
-      .values({
+    const created = await createCompany({
         name: body.data.name.trim(),
         registrationNumber: body.data.registrationNumber ?? null,
         contactEmail: body.data.contactEmail?.toLowerCase() ?? null,
         isDemo: isDevelopment,
       })
-      .returning();
     if (!created) {
       res.status(500).json({ error: "Could not create company profile" });
       return;
     }
-    await db.insert(companyMembersTable).values({
+    await createCompanyMembership({
       companyId: created.id,
       clerkUserId: userId,
       role: "company_admin",
@@ -877,19 +1032,12 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Register a company profile to continue" });
     return;
   }
-  const [company] = await db
-    .select()
-    .from(companiesTable)
-    .where(eq(companiesTable.id, membership.companyId))
-    .limit(1);
+  const company = await getCompanyById(membership.companyId);
   if (!company) {
     res.status(404).json({ error: "Company not found" });
     return;
   }
-  const workers = await db
-    .select({ id: workersTable.id, status: workersTable.status })
-    .from(workersTable)
-    .where(eq(workersTable.companyId, company.id));
+  const workers = await getWorkersByCompany(company.id);
   const workerIds = workers.map((worker) => worker.id);
   const month = currentMonth();
   const [received, paid, monthTips, transactions, monthlyRows] = await Promise.all([
@@ -897,16 +1045,7 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
     sumPayoutsForWorkers(workerIds, "paid"),
     sumTipsForWorkers(workerIds, successfulTipStatuses, monthRange(month)),
     companyTransactionRows(company.id, 6),
-    db
-      .select({
-        month: sql<string>`to_char(date_trunc('month', ${tipsTable.createdAt}), 'YYYY-MM')`,
-        amountFils: sql<number>`coalesce(sum(${tipsTable.amountFils}), 0)`,
-      })
-      .from(tipsTable)
-      .innerJoin(workersTable, eq(tipsTable.workerId, workersTable.id))
-      .where(and(eq(workersTable.companyId, company.id), inArray(tipsTable.status, [...successfulTipStatuses])))
-      .groupBy(sql`date_trunc('month', ${tipsTable.createdAt})`)
-      .orderBy(sql`date_trunc('month', ${tipsTable.createdAt})`),
+    monthlyTipsForCompany(company.id, successfulTipStatuses),
   ]);
   const profile = {
     id: company.id,
@@ -923,7 +1062,7 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
       paidOutFils: paid,
       activeWorkers: workers.filter((worker) => worker.status === "active").length,
       monthTipsFils: monthTips,
-      monthly: monthlyRows.map((row) => ({ month: row.month, amountFils: Number(row.amountFils) })),
+      monthly: monthlyRows,
       recentTransactions: transactions.map(toTransaction),
       isDemo: company.isDemo,
     }),
@@ -938,11 +1077,7 @@ router.get("/company/workers", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const rows = await db
-    .select()
-    .from(workersTable)
-    .where(eq(workersTable.companyId, membership.companyId))
-    .orderBy(workersTable.name);
+  const rows = await getWorkersByCompany(membership.companyId);
   const values = await Promise.all(
     rows.map(async (worker) => ({
       id: worker.id,
@@ -983,28 +1118,28 @@ router.post("/company/workers", async (req, res): Promise<void> => {
   const temporaryPassword = generateTemporaryPassword();
   const workerPasswordHash = await hashWorkerPassword(temporaryPassword);
   const slug = `${body.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${randomUUID().slice(0, 6)}`;
-  let worker: typeof workersTable.$inferSelect | undefined;
+  let worker: Worker | null = null;
   try {
-    [worker] = await db
-      .insert(workersTable)
-      .values({
+    worker = await createWorker({
         id: workerId,
         companyId: membership.companyId,
+        clerkUserId: null,
+        clerkInvitationId: null,
         slug,
         name: body.data.name.trim(),
         arabicName: body.data.arabicName ?? null,
+        email: null,
         phoneNumber,
         workerPasswordHash,
         passwordChangeRequired: true,
-        email: null,
         role: body.data.role.trim(),
         branch: body.data.branch ?? null,
+        photoUrl: null,
         status: "active",
         isDemo: false,
-      })
-      .returning();
+      });
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
       res.status(409).json({ error: "A worker account already uses this phone number." });
       return;
     }
@@ -1048,11 +1183,11 @@ router.post("/company/workers/:workerId/temporary-password", async (req, res): P
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const [worker] = await db
-    .select()
-    .from(workersTable)
-    .where(and(eq(workersTable.id, params.data.workerId), eq(workersTable.companyId, membership.companyId)))
-    .limit(1);
+  const worker = await getWorkerById(params.data.workerId);
+  if (worker?.companyId !== membership.companyId) {
+    res.status(404).json({ error: "Worker not found" });
+    return;
+  }
   if (!worker) {
     res.status(404).json({ error: "Worker not found" });
     return;
@@ -1081,16 +1216,17 @@ router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const [worker] = await db
-    .update(workersTable)
-    .set({
-      ...body.data,
-      name: body.data.name?.trim(),
-      role: body.data.role?.trim(),
-      email: body.data.email?.toLowerCase(),
-    })
-    .where(and(eq(workersTable.id, params.data.workerId), eq(workersTable.companyId, membership.companyId)))
-    .returning();
+  const changes = Object.fromEntries(
+    Object.entries(body.data).filter(([, value]) => value !== undefined),
+  ) as Partial<Worker>;
+  if (body.data.name !== undefined) changes.name = body.data.name.trim();
+  if (body.data.role !== undefined) changes.role = body.data.role.trim();
+  if (body.data.email !== undefined) changes.email = body.data.email?.toLowerCase() ?? null;
+  const worker = await updateWorker(
+    params.data.workerId,
+    changes,
+    { companyId: membership.companyId },
+  );
   if (!worker) {
     res.status(404).json({ error: "Worker not found" });
     return;
@@ -1153,12 +1289,8 @@ router.post("/company/payouts", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const [worker] = await db
-    .select()
-    .from(workersTable)
-    .where(and(eq(workersTable.id, body.data.workerId), eq(workersTable.companyId, membership.companyId)))
-    .limit(1);
-  if (!worker) {
+  const worker = await getWorkerById(body.data.workerId);
+  if (!worker || worker.companyId !== membership.companyId) {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
@@ -1168,9 +1300,7 @@ router.post("/company/payouts", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Payout exceeds this worker’s available tip balance" });
     return;
   }
-  const [payout] = await db
-    .insert(payoutsTable)
-    .values({
+  const payout = await createPayout({
       companyId: membership.companyId,
       workerId: worker.id,
       amountFils: body.data.amountFils,
@@ -1179,8 +1309,7 @@ router.post("/company/payouts", async (req, res): Promise<void> => {
       note: body.data.note ?? null,
       recordedByClerkUserId: userId,
       isDemo: worker.isDemo,
-    })
-    .returning();
+    });
   if (!payout) {
     res.status(500).json({ error: "Could not save payout record" });
     return;
@@ -1220,20 +1349,16 @@ router.patch("/company/payouts/:payoutId", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const [payout] = await db
-    .update(payoutsTable)
-    .set({ status: body.data.status })
-    .where(and(eq(payoutsTable.id, params.data.payoutId), eq(payoutsTable.companyId, membership.companyId)))
-    .returning();
+  const payout = await updatePayoutStatus(
+    params.data.payoutId,
+    membership.companyId,
+    body.data.status,
+  );
   if (!payout) {
     res.status(404).json({ error: "Payout record not found" });
     return;
   }
-  const [worker] = await db
-    .select({ name: workersTable.name })
-    .from(workersTable)
-    .where(eq(workersTable.id, payout.workerId))
-    .limit(1);
+  const worker = await getWorkerById(payout.workerId);
   await writeAudit(membership.companyId, userId, "payout.status.updated", "payout", payout.id, {
     status: payout.status,
   });
@@ -1265,10 +1390,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
-  const workers = await db
-    .select({ id: workersTable.id })
-    .from(workersTable)
-    .where(eq(workersTable.companyId, membership.companyId));
+  const workers = await getWorkersByCompany(membership.companyId);
   const workerIds = workers.map((worker) => worker.id);
   const range = monthRange(params.data.month);
   const [tipsFils, payouts, transactions] = await Promise.all([
@@ -1291,13 +1413,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     paidOutFils,
     workerCount: new Set(transactions.map((transaction) => transaction.workerId)).size,
     transactionCount: transactions.length,
-    isDemo: membership.companyId
-      ? (await db
-          .select({ isDemo: companiesTable.isDemo })
-          .from(companiesTable)
-          .where(eq(companiesTable.id, membership.companyId))
-          .limit(1))[0]?.isDemo ?? false
-      : false,
+    isDemo: (await getCompanyById(membership.companyId))?.isDemo ?? false,
   };
   res.json(GetCompanyReportResponse.parse(report));
 });

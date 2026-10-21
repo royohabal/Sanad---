@@ -37,6 +37,38 @@ export const GetPublicWorkerResponse = zod.object({
 
 
 /**
+ * @summary Create a short-lived KWD-to-USD tip quote
+ */
+
+export const createTipQuoteBodyAmountFilsMin = 250;
+export const createTipQuoteBodyAmountFilsMax = 1000000;
+
+export const createTipQuoteBodyRatingMax = 5;
+
+
+
+export const CreateTipQuoteBody = zod.object({
+  "workerSlug": zod.string().min(1),
+  "amountFils": zod.number().int().min(createTipQuoteBodyAmountFilsMin).max(createTipQuoteBodyAmountFilsMax),
+  "rating": zod.number().int().min(1).max(createTipQuoteBodyRatingMax).nullish()
+})
+
+export const CreateTipQuoteResponse = zod.object({
+  "workerSlug": zod.string(),
+  "amountFils": zod.number().int(),
+  "currency": zod.enum(['KWD']),
+  "usdAmountCents": zod.number().int(),
+  "paymentCurrency": zod.enum(['USD']),
+  "kwdToUsdRate": zod.string(),
+  "rateSource": zod.string(),
+  "rateUpdatedAt": zod.coerce.date(),
+  "quotedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date(),
+  "quoteToken": zod.string()
+})
+
+
+/**
  * @summary Start a tip checkout or clearly labelled development demo
  */
 
@@ -47,10 +79,13 @@ export const createTipCheckoutBodyRatingMax = 5;
 
 
 
+
 export const CreateTipCheckoutBody = zod.object({
   "workerSlug": zod.string().min(1),
   "amountFils": zod.number().int().min(createTipCheckoutBodyAmountFilsMin).max(createTipCheckoutBodyAmountFilsMax),
-  "rating": zod.number().int().min(1).max(createTipCheckoutBodyRatingMax).nullish()
+  "rating": zod.number().int().min(1).max(createTipCheckoutBodyRatingMax).nullish(),
+  "quoteToken": zod.string().min(1),
+  "requestId": zod.string().uuid()
 })
 
 export const CreateTipCheckoutResponse = zod.object({
@@ -58,7 +93,14 @@ export const CreateTipCheckoutResponse = zod.object({
   "paymentMode": zod.enum(['demo', 'stripe', 'unavailable']),
   "status": zod.enum(['demo', 'pending', 'unavailable']),
   "checkoutUrl": zod.string().url().nullish(),
-  "message": zod.string()
+  "message": zod.string(),
+  "amountFils": zod.number().int(),
+  "currency": zod.enum(['KWD']),
+  "usdAmountCents": zod.number().int(),
+  "paymentCurrency": zod.enum(['USD']),
+  "kwdToUsdRate": zod.string(),
+  "rateSource": zod.string(),
+  "rateUpdatedAt": zod.coerce.date()
 })
 
 
@@ -76,7 +118,12 @@ export const GetTipStatusResponse = zod.object({
   "currency": zod.enum(['KWD']),
   "isDemo": zod.boolean(),
   "workerName": zod.string().optional(),
-  "companyName": zod.string().optional()
+  "companyName": zod.string().optional(),
+  "usdAmountCents": zod.number().int().optional(),
+  "paymentCurrency": zod.enum(['USD']).optional(),
+  "kwdToUsdRate": zod.string().optional(),
+  "rateSource": zod.string().optional(),
+  "rateUpdatedAt": zod.coerce.date().optional()
 })
 
 

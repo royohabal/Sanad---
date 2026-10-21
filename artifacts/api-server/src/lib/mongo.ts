@@ -4,10 +4,7 @@ let client: MongoClient | null = null;
 let connected: Promise<MongoClient> | null = null;
 
 export function getMongoDatabaseName(): string {
-  return (
-    process.env.MONGODB_DATABASE ??
-    (process.env.NODE_ENV === "production" ? "sanad" : "sanad_dev")
-  );
+  return process.env.NODE_ENV === "production" ? "sanad" : "sanad_dev";
 }
 
 export async function getMongoDb(): Promise<Db> {
@@ -23,6 +20,12 @@ export async function getMongoDb(): Promise<Db> {
   });
   await connected;
   return client.db(getMongoDatabaseName());
+}
+
+export async function closeMongoConnection(): Promise<void> {
+  if (client) await client.close();
+  client = null;
+  connected = null;
 }
 
 export async function verifyMongoConnection(): Promise<{

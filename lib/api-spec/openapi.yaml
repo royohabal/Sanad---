@@ -50,6 +50,26 @@ paths:
               schema: { $ref: "#/components/schemas/PublicWorker" }
         "404":
           description: Worker not found
+  /tips/quote:
+    post:
+      operationId: createTipQuote
+      tags: [tips]
+      summary: Create a short-lived KWD-to-USD tip quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TipQuoteInput" }
+      responses:
+        "200":
+          description: Currency conversion quote
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TipQuote" }
+        "400":
+          description: Invalid tip quote request
+        "502":
+          description: Exchange-rate service unavailable
   /tips/checkout:
     post:
       operationId: createTipCheckout
@@ -450,20 +470,51 @@ components:
         photoUrl: { type: ["string", "null"], format: uri }
     TipCheckoutInput:
       type: object
+      required: [workerSlug, amountFils, quoteToken, requestId]
+      properties:
+        workerSlug: { type: string, minLength: 1 }
+        amountFils: { type: integer, minimum: 250, maximum: 1000000 }
+        rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
+        quoteToken: { type: string, minLength: 1 }
+        requestId: { type: string, format: uuid }
+    TipQuoteInput:
+      type: object
       required: [workerSlug, amountFils]
       properties:
         workerSlug: { type: string, minLength: 1 }
         amountFils: { type: integer, minimum: 250, maximum: 1000000 }
         rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
+    TipQuote:
+      type: object
+      required: [workerSlug, amountFils, currency, usdAmountCents, paymentCurrency, kwdToUsdRate, rateSource, rateUpdatedAt, quotedAt, expiresAt, quoteToken]
+      properties:
+        workerSlug: { type: string }
+        amountFils: { type: integer }
+        currency: { type: string, enum: [KWD] }
+        usdAmountCents: { type: integer }
+        paymentCurrency: { type: string, enum: [USD] }
+        kwdToUsdRate: { type: string }
+        rateSource: { type: string }
+        rateUpdatedAt: { type: string, format: date-time }
+        quotedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        quoteToken: { type: string }
     TipCheckoutResponse:
       type: object
-      required: [tipId, paymentMode, status, message]
+      required: [tipId, paymentMode, status, message, amountFils, currency, usdAmountCents, paymentCurrency, kwdToUsdRate, rateSource, rateUpdatedAt]
       properties:
         tipId: { type: string }
         paymentMode: { type: string, enum: [demo, stripe, unavailable] }
         status: { type: string, enum: [demo, pending, unavailable] }
         checkoutUrl: { type: ["string", "null"], format: uri }
         message: { type: string }
+        amountFils: { type: integer }
+        currency: { type: string, enum: [KWD] }
+        usdAmountCents: { type: integer }
+        paymentCurrency: { type: string, enum: [USD] }
+        kwdToUsdRate: { type: string }
+        rateSource: { type: string }
+        rateUpdatedAt: { type: string, format: date-time }
     TipPaymentStatus:
       type: object
       required: [tipId, status, amountFils, currency, isDemo]
@@ -475,6 +526,11 @@ components:
         isDemo: { type: boolean }
         workerName: { type: string }
         companyName: { type: string }
+        usdAmountCents: { type: integer }
+        paymentCurrency: { type: string, enum: [USD] }
+        kwdToUsdRate: { type: string }
+        rateSource: { type: string }
+        rateUpdatedAt: { type: string, format: date-time }
     TipTransaction:
       type: object
       required: [id, workerId, workerName, amountFils, currency, status, createdAt, isDemo]

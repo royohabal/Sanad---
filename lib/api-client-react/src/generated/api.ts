@@ -34,6 +34,8 @@ import type {
   TipCheckoutInput,
   TipCheckoutResponse,
   TipPaymentStatus,
+  TipQuote,
+  TipQuoteInput,
   TipTransaction,
   Worker,
   WorkerAuthStatus,
@@ -228,6 +230,94 @@ export function useGetPublicWorker<TData = Awaited<ReturnType<typeof getPublicWo
 
 
 
+
+export const getCreateTipQuoteUrl = () => {
+
+
+
+
+  return `/api/tips/quote`
+}
+
+/**
+ * @summary Create a short-lived KWD-to-USD tip quote
+ */
+export const createTipQuote = async (tipQuoteInput: TipQuoteInput, options?: Parameters<typeof customFetch>[1]): Promise<TipQuote> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<TipQuote>(getCreateTipQuoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(tipQuoteInput)
+  }
+);}
+
+
+
+
+
+export const getCreateTipQuoteMutationKey = () => ['createTipQuote'] as const;
+
+export const getCreateTipQuoteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTipQuote>>, TError,CreateTipQuoteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTipQuote>>, TError,CreateTipQuoteMutationVariables, TContext> => {
+
+const mutationKey = getCreateTipQuoteMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTipQuote>>, CreateTipQuoteMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTipQuote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTipQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof createTipQuote>>>
+    export type CreateTipQuoteMutationBody = BodyType<TipQuoteInput>
+    export type CreateTipQuoteMutationError = ErrorType<void>
+    export type CreateTipQuoteMutationVariables = {data: BodyType<TipQuoteInput>}
+
+    /**
+ * @summary Create a short-lived KWD-to-USD tip quote
+ */
+export const useCreateTipQuote = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTipQuote>>, TError,CreateTipQuoteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTipQuote>>,
+        TError,
+        CreateTipQuoteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateTipQuoteMutationOptions(options));
+    }
 
 export const getCreateTipCheckoutUrl = () => {
 

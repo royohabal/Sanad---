@@ -13,6 +13,17 @@ import { getMongoDb, getMongoDatabaseName, verifyMongoConnection } from "./mongo
 type TipStatus = Tip["status"];
 type PayoutStatus = Payout["status"];
 type DateRange = { from: Date; to: Date };
+export type TipCheckoutMetadata = {
+  checkoutRequestId?: string;
+  checkoutQuoteId?: string;
+  usdAmountCents?: number;
+  paymentCurrency?: "USD";
+  kwdToUsdRate?: string;
+  rateSource?: string;
+  rateUpdatedAt?: Date;
+  quotedAt?: Date;
+};
+export type StoredTip = Tip & TipCheckoutMetadata;
 type TransactionRow = Pick<
   Tip,
   | "id"
@@ -91,6 +102,13 @@ export async function initializeMongoStore(): Promise<{
     db.collection("workerAuthSessions").createIndex({ expiresAt: 1 }),
     db.collection("tips").createIndex({ id: 1 }, { unique: true }),
     db.collection("tips").createIndex({ reference: 1 }, { unique: true }),
+    db.collection("tips").createIndex(
+      { checkoutRequestId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { checkoutRequestId: { $type: "string" } },
+      },
+    ),
     db.collection("tips").createIndex(
       { stripeCheckoutSessionId: 1 },
       {
@@ -307,13 +325,13 @@ export async function deleteWorkerAuthSessions(
 }
 
 export async function createTip(
-  input: Omit<Tip, "createdAt" | "updatedAt"> & {
+  input: Omit<StoredTip, "createdAt" | "updatedAt"> & {
     createdAt?: Date;
     updatedAt?: Date;
   },
-): Promise<Tip> {
+): Promise<StoredTip> {
   const now = new Date();
-  const tip: Tip = {
+  const tip: StoredTip = {
     ...input,
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,
@@ -322,26 +340,66 @@ export async function createTip(
   return tip;
 }
 
-export async function getTipById(id: string): Promise<Tip | null> {
+export async function createTipIdempotently(
+  input: Omit<StoredTip, "createdAt" | "updatedAt"> & {
+    createdAt?: Date;
+    updatedAt?: Date;
+    checkoutRequestId: string;
+  },
+): Promise<StoredTip> {
+  const tips = await collection("tips");
+  const existing = await tips.findOne({
+    checkoutRequestId: input.checkoutRequestId,
+  });
+  if (existing) return withoutMongoId<StoredTip>(existing);
+
+  try {
+    return await createTip(input);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === 11000
+    ) {
+      const duplicate = await tips.findOne({
+        checkoutRequestId: input.checkoutRequestId,
+      });
+      if (duplicate) return withoutMongoId<StoredTip>(duplicate);
+    }
+    throw error;
+  }
+}
+
+export async function getTipByCheckoutRequestId(
+  checkoutRequestId: string,
+): Promise<StoredTip | null> {
+  const document = await (await collection("tips")).findOne({
+    checkoutRequestId,
+  });
+  return document ? withoutMongoId<StoredTip>(document) : null;
+}
+
+export async function getTipById(id: string): Promise<StoredTip | null> {
   const document = await (await collection("tips")).findOne({ id });
-  return document ? withoutMongoId<Tip>(document) : null;
+  return document ? withoutMongoId<StoredTip>(document) : null;
 }
 
 export async function updateTip(
   id: string,
-  changes: Partial<Tip>,
+  changes: Partial<StoredTip>,
   extraFilter: Document = {},
-): Promise<Tip | null> {
+): Promise<StoredTip | null> {
   const document = await (await collection("tips")).findOneAndUpdate(
     { id, ...extraFilter },
     { $set: { ...changes, updatedAt: new Date() } },
     { returnDocument: "after" },
   );
-  return document ? withoutMongoId<Tip>(document) : null;
+  return document ? withoutMongoId<StoredTip>(document) : null;
 }
 
 export async function getTipWithNames(id: string): Promise<
-  (Pick<Tip, "id" | "status" | "amountFils" | "currency" | "isDemo" | "stripeCheckoutSessionId"> & {
+  (Pick<StoredTip, "id" | "workerId" | "status" | "amountFils" | "currency" | "isDemo" | "stripeCheckoutSessionId" | "checkoutQuoteId" | "usdAmountCents" | "paymentCurrency" | "kwdToUsdRate" | "rateSource" | "rateUpdatedAt"> & {
     workerName: string;
     companyName: string;
   }) | null
@@ -354,11 +412,18 @@ export async function getTipWithNames(id: string): Promise<
   if (!company) return null;
   return {
     id: tip.id,
+    workerId: tip.workerId,
     status: tip.status,
     amountFils: tip.amountFils,
     currency: tip.currency,
     isDemo: tip.isDemo,
     stripeCheckoutSessionId: tip.stripeCheckoutSessionId,
+    checkoutQuoteId: tip.checkoutQuoteId,
+    usdAmountCents: tip.usdAmountCents,
+    paymentCurrency: tip.paymentCurrency,
+    kwdToUsdRate: tip.kwdToUsdRate,
+    rateSource: tip.rateSource,
+    rateUpdatedAt: tip.rateUpdatedAt,
     workerName: worker.name,
     companyName: company.name,
   };
@@ -575,6 +640,29 @@ export async function companyPayoutRows(
           isDemo: payout.isDemo,
         }]
       : [];
+  });
+}
+
+export async function workerPayoutRows(workerId: string): Promise<PayoutRow[]> {
+  const worker = await getWorkerById(workerId);
+  if (!worker) return [];
+  const documents = await (await collection("payouts"))
+    .find({ workerId })
+    .sort({ recordedAt: -1 })
+    .toArray();
+  return documents.map((document) => {
+    const payout = withoutMongoId<Payout>(document);
+    return {
+      id: payout.id,
+      workerId: payout.workerId,
+      workerName: worker.name,
+      amountFils: payout.amountFils,
+      month: payout.month,
+      status: payout.status,
+      recordedAt: payout.recordedAt,
+      note: payout.note,
+      isDemo: payout.isDemo,
+    };
   });
 }
 

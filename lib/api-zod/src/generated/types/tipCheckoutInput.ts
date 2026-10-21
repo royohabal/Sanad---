@@ -20,4 +20,7 @@ export interface TipCheckoutInput {
      * @nullable
      */
   rating?: number | null;
+  /** @minLength 1 */
+  quoteToken: string;
+  requestId: string;
 }

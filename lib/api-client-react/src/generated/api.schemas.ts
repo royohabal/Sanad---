@@ -37,6 +37,53 @@ export interface TipCheckoutInput {
      * @nullable
      */
   rating?: number | null;
+  /** @minLength 1 */
+  quoteToken: string;
+  requestId: string;
+}
+
+export interface TipQuoteInput {
+  /** @minLength 1 */
+  workerSlug: string;
+  /**
+     * @minimum 250
+     * @maximum 1000000
+     */
+  amountFils: number;
+  /**
+     * @minimum 1
+     * @maximum 5
+     * @nullable
+     */
+  rating?: number | null;
+}
+
+export type TipQuoteCurrency = typeof TipQuoteCurrency[keyof typeof TipQuoteCurrency];
+
+
+export const TipQuoteCurrency = {
+  KWD: 'KWD',
+} as const;
+
+export type TipQuotePaymentCurrency = typeof TipQuotePaymentCurrency[keyof typeof TipQuotePaymentCurrency];
+
+
+export const TipQuotePaymentCurrency = {
+  USD: 'USD',
+} as const;
+
+export interface TipQuote {
+  workerSlug: string;
+  amountFils: number;
+  currency: TipQuoteCurrency;
+  usdAmountCents: number;
+  paymentCurrency: TipQuotePaymentCurrency;
+  kwdToUsdRate: string;
+  rateSource: string;
+  rateUpdatedAt: string;
+  quotedAt: string;
+  expiresAt: string;
+  quoteToken: string;
 }
 
 export type TipCheckoutResponsePaymentMode = typeof TipCheckoutResponsePaymentMode[keyof typeof TipCheckoutResponsePaymentMode];
@@ -57,6 +104,20 @@ export const TipCheckoutResponseStatus = {
   unavailable: 'unavailable',
 } as const;
 
+export type TipCheckoutResponseCurrency = typeof TipCheckoutResponseCurrency[keyof typeof TipCheckoutResponseCurrency];
+
+
+export const TipCheckoutResponseCurrency = {
+  KWD: 'KWD',
+} as const;
+
+export type TipCheckoutResponsePaymentCurrency = typeof TipCheckoutResponsePaymentCurrency[keyof typeof TipCheckoutResponsePaymentCurrency];
+
+
+export const TipCheckoutResponsePaymentCurrency = {
+  USD: 'USD',
+} as const;
+
 export interface TipCheckoutResponse {
   tipId: string;
   paymentMode: TipCheckoutResponsePaymentMode;
@@ -64,6 +125,13 @@ export interface TipCheckoutResponse {
   /** @nullable */
   checkoutUrl?: string | null;
   message: string;
+  amountFils: number;
+  currency: TipCheckoutResponseCurrency;
+  usdAmountCents: number;
+  paymentCurrency: TipCheckoutResponsePaymentCurrency;
+  kwdToUsdRate: string;
+  rateSource: string;
+  rateUpdatedAt: string;
 }
 
 export type TipPaymentStatusStatus = typeof TipPaymentStatusStatus[keyof typeof TipPaymentStatusStatus];
@@ -84,6 +152,13 @@ export const TipPaymentStatusCurrency = {
   KWD: 'KWD',
 } as const;
 
+export type TipPaymentStatusPaymentCurrency = typeof TipPaymentStatusPaymentCurrency[keyof typeof TipPaymentStatusPaymentCurrency];
+
+
+export const TipPaymentStatusPaymentCurrency = {
+  USD: 'USD',
+} as const;
+
 export interface TipPaymentStatus {
   tipId: string;
   status: TipPaymentStatusStatus;
@@ -92,6 +167,11 @@ export interface TipPaymentStatus {
   isDemo: boolean;
   workerName?: string;
   companyName?: string;
+  usdAmountCents?: number;
+  paymentCurrency?: TipPaymentStatusPaymentCurrency;
+  kwdToUsdRate?: string;
+  rateSource?: string;
+  rateUpdatedAt?: string;
 }
 
 export type TipTransactionCurrency = typeof TipTransactionCurrency[keyof typeof TipTransactionCurrency];

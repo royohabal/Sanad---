@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { handleStripeWebhook, StripeWebhookError } from "./lib/stripeWebhook";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -34,6 +35,39 @@ app.use(
 );
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(cors({ credentials: true, origin: true }));
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res): Promise<void> => {
+    if (!Buffer.isBuffer(req.body)) {
+      res.status(400).json({ error: "Invalid webhook body" });
+      return;
+    }
+
+    try {
+      const result = await handleStripeWebhook(
+        req.body,
+        req.header("stripe-signature") ?? "",
+      );
+      req.log.info({ result }, "Stripe webhook received");
+      res.status(200).json({ received: true });
+    } catch (error) {
+      if (error instanceof StripeWebhookError) {
+        if (error.code === "configuration") {
+          res.status(503).json({ error: "Stripe webhook is not configured" });
+          return;
+        }
+        res.status(400).json({ error: "Invalid Stripe webhook" });
+        return;
+      }
+      req.log.error(
+        { errorType: error instanceof Error ? error.name : "UnknownError" },
+        "Could not process Stripe webhook",
+      );
+      res.status(500).json({ error: "Could not process Stripe webhook" });
+    }
+  },
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
