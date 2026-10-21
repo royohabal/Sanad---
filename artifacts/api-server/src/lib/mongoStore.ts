@@ -177,6 +177,98 @@ export async function normalizeDemoWorkerNames(): Promise<number> {
   return renamed;
 }
 
+export async function normalizeDemoCompanyTransactionSamples(): Promise<{
+  addedWorkers: number;
+  reassignedTips: number;
+}> {
+  if (process.env.NODE_ENV === "production") {
+    return { addedWorkers: 0, reassignedTips: 0 };
+  }
+
+  const workersCollection = await collection("workers");
+  const demoWorkers = await workersCollection
+    .find({ isDemo: true })
+    .project<{ id: string; companyId: string; createdAt: Date }>({
+      id: 1,
+      companyId: 1,
+      createdAt: 1,
+    })
+    .sort({ companyId: 1, createdAt: 1, id: 1 })
+    .toArray();
+  const workersByCompany = new Map<string, typeof demoWorkers>();
+  for (const worker of demoWorkers) {
+    const companyWorkers = workersByCompany.get(worker.companyId) ?? [];
+    companyWorkers.push(worker);
+    workersByCompany.set(worker.companyId, companyWorkers);
+  }
+
+  let addedWorkers = 0;
+  let reassignedTips = 0;
+  const tipsCollection = await collection("tips");
+  for (const [companyId, companyWorkers] of workersByCompany) {
+    // The landing demo has one public worker; only company demo teams use a list.
+    if (companyWorkers.length < 3) continue;
+
+    while (companyWorkers.length < 6) {
+      const ordinal = companyWorkers.length + 1;
+      const id = randomUUID();
+      const now = new Date();
+      const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+      const arabicOrdinal = String(ordinal).replace(
+        /\d/g,
+        (digit) => arabicDigits[Number(digit)] ?? digit,
+      );
+      const worker = {
+        id,
+        companyId,
+        clerkUserId: null,
+        clerkInvitationId: null,
+        slug: `worker-no-${ordinal}-${randomUUID().slice(0, 8)}`,
+        name: `Worker No. ${ordinal}`,
+        arabicName: `الموظف رقم ${arabicOrdinal}`,
+        email: null,
+        phoneNumber: null,
+        workerPasswordHash: null,
+        passwordChangeRequired: false,
+        role: "Service team",
+        branch: "Salmiya",
+        photoUrl: null,
+        status: "active",
+        isDemo: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await workersCollection.insertOne(withMongoId(worker));
+      companyWorkers.push({ id, companyId, createdAt: now });
+      addedWorkers += 1;
+    }
+
+    companyWorkers.sort(
+      (left, right) =>
+        left.createdAt.getTime() - right.createdAt.getTime() ||
+        left.id.localeCompare(right.id),
+    );
+    const workerIds = companyWorkers.map(({ id }) => id);
+    const recentDemoTips = await tipsCollection
+      .find({ workerId: { $in: workerIds }, isDemo: true, status: "demo" })
+      .sort({ createdAt: -1, id: 1 })
+      .limit(6)
+      .toArray();
+
+    for (const [index, tip] of recentDemoTips.entries()) {
+      const workerId = companyWorkers[index]?.id;
+      if (!workerId || tip.workerId === workerId) continue;
+      const result = await tipsCollection.updateOne(
+        { id: tip.id, isDemo: true, status: "demo" },
+        { $set: { workerId, updatedAt: new Date() } },
+      );
+      reassignedTips += result.modifiedCount;
+    }
+  }
+
+  return { addedWorkers, reassignedTips };
+}
+
 export async function getCompanyById(id: string): Promise<Company | null> {
   const document = await (await collection("companies")).findOne({ id });
   return document ? withoutMongoId<Company>(document) : null;

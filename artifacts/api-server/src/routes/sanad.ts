@@ -264,6 +264,9 @@ async function seedDemoCompany(companyId: string, actorId: string) {
     { name: "Worker No. 1", arabicName: "الموظف رقم ١", role: "Service host", branch: "Salmiya" },
     { name: "Worker No. 2", arabicName: "الموظف رقم ٢", role: "Barista", branch: "Sharq" },
     { name: "Worker No. 3", arabicName: "الموظف رقم ٣", role: "Guest services", branch: "Salmiya" },
+    { name: "Worker No. 4", arabicName: "الموظف رقم ٤", role: "Service team", branch: "Sharq" },
+    { name: "Worker No. 5", arabicName: "الموظف رقم ٥", role: "Service team", branch: "Salmiya" },
+    { name: "Worker No. 6", arabicName: "الموظف رقم ٦", role: "Service team", branch: "Sharq" },
   ];
   const workers = await Promise.all(
     demoWorkers.map((item) =>
@@ -303,11 +306,27 @@ async function seedDemoCompany(companyId: string, actorId: string) {
       stripeCheckoutSessionId: null,
       stripePaymentIntentId: null,
       isDemo: true,
-      createdAt: new Date(now - (itemIndex + workerIndex * 2) * 86400000),
+      createdAt: new Date(now - (itemIndex + workerIndex * 2 + 1) * 86400000),
     })),
   );
+  const latestWorkerSamples = workers.map((worker, workerIndex) => ({
+    reference: `demo_latest_${randomUUID()}`,
+    workerId: worker.id,
+    amountFils: [250, 500, 750, 1000, 1500, 2000][workerIndex] ?? 500,
+    processorFeeFils: 0,
+    refundedAmountFils: 0,
+    currency: "KWD",
+    status: "demo" as const,
+    rating: [4, 5, 5, 4, 5, 5][workerIndex] ?? 5,
+    stripeCheckoutSessionId: null,
+    stripePaymentIntentId: null,
+    isDemo: true,
+    createdAt: new Date(now - workerIndex * 60_000),
+  }));
   await Promise.all(
-    demoTips.map((tip) => createTip({ id: randomUUID(), ...tip })),
+    [...latestWorkerSamples, ...demoTips].map((tip) =>
+      createTip({ id: randomUUID(), ...tip }),
+    ),
   );
   await Promise.all([
     {

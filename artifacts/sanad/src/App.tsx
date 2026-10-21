@@ -317,28 +317,10 @@ function Landing() {
   useLayoutEffect(() => {
     if (previousLanguage.current === language) return;
     previousLanguage.current = language;
-    document.querySelectorAll('.landing-reveal').forEach((node) => node.classList.add('is-visible'));
     setLanguageSwitching(true);
     const timeout = window.setTimeout(() => setLanguageSwitching(false), 220);
     return () => window.clearTimeout(timeout);
   }, [language]);
-  useEffect(() => {
-    const nodes = document.querySelectorAll('.landing-reveal');
-    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      nodes.forEach((node) => node.classList.add('is-visible'));
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12 });
-    nodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
   const demoAmounts = ['0.500', '1.000', '2.000'];
   return <LocalizedTree><main className={`landing ${languageSwitching ? 'language-switching' : ''}`}>
     <Header/>

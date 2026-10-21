@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import {
   initializeMongoStore,
+  normalizeDemoCompanyTransactionSamples,
   normalizeDemoWorkerNames,
 } from "./lib/mongoStore";
 
@@ -23,6 +24,7 @@ async function startServer(): Promise<void> {
   try {
     const { databaseName, collectionNames } = await initializeMongoStore();
     const renamedDemoWorkers = await normalizeDemoWorkerNames();
+    const demoSampleUpdates = await normalizeDemoCompanyTransactionSamples();
     logger.info(
       { databaseName, collectionNames },
       "MongoDB SANAD data store initialized",
@@ -31,6 +33,12 @@ async function startServer(): Promise<void> {
       logger.info(
         { renamedDemoWorkers },
         "Updated development demo worker names",
+      );
+    }
+    if (demoSampleUpdates.addedWorkers > 0 || demoSampleUpdates.reassignedTips > 0) {
+      logger.info(
+        demoSampleUpdates,
+        "Updated development demo transaction samples",
       );
     }
   } catch (error) {

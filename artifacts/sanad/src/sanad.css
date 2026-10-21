@@ -261,8 +261,7 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .cta-primary:hover,.header-signup:hover { transform:translateY(-2px); }
 .cta-primary svg,.header-signup svg,.business-link svg,.preview-signup svg,.real-tip-link svg { transition:transform .2s; }
 .cta-primary:hover svg,.header-signup:hover svg,.business-link:hover svg,.preview-signup:hover svg,.real-tip-link:hover svg { transform:translate(2px,-2px); }
-.landing-reveal { opacity:0; transform:translateY(13px); transition:opacity .55s ease,transform .55s cubic-bezier(.2,.75,.2,1); }
-.landing-reveal.is-visible { opacity:1; transform:translateY(0); }
+.landing-reveal { opacity:1; transform:none; }
 .how-section { max-width:1180px; padding:72px 8% 84px; margin:auto; }
 .how-heading { display:flex; flex-direction:column; align-items:flex-start; gap:7px; text-align:left; }
 .how-heading .eyebrow { flex:none; }
