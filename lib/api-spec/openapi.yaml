@@ -88,11 +88,73 @@ paths:
               schema: { $ref: "#/components/schemas/TipPaymentStatus" }
         "404":
           description: Tip not found
+  /worker/auth/login:
+    post:
+      operationId: workerLogin
+      tags: [worker]
+      summary: Sign in a worker with a phone number and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkerLoginInput" }
+      responses:
+        "200":
+          description: Worker sign-in status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerAuthStatus" }
+        "401":
+          description: Phone number or password is incorrect
+        "429":
+          description: Too many sign-in attempts
+  /worker/auth/session:
+    get:
+      operationId: getWorkerAuthSession
+      tags: [worker]
+      summary: Check the current worker session
+      responses:
+        "200":
+          description: Worker session status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerAuthStatus" }
+  /worker/auth/password:
+    post:
+      operationId: changeWorkerPassword
+      tags: [worker]
+      security: [{ workerSession: [] }]
+      summary: Set a worker password after first sign-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkerPasswordInput" }
+      responses:
+        "200":
+          description: Worker password updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerAuthStatus" }
+        "401":
+          description: Password setup session required
+  /worker/auth/logout:
+    post:
+      operationId: workerLogout
+      tags: [worker]
+      security: [{ workerSession: [] }]
+      summary: End the current worker session
+      responses:
+        "200":
+          description: Worker signed out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerSignoutResult" }
   /worker/dashboard:
     get:
       operationId: getWorkerDashboard
       tags: [worker]
-      security: [{ clerkSession: [] }]
+      security: [{ clerkSession: [] }, { workerSession: [] }]
       summary: Get the signed-in worker's earnings summary
       responses:
         "200":
@@ -106,7 +168,7 @@ paths:
     get:
       operationId: listWorkerTransactions
       tags: [worker]
-      security: [{ clerkSession: [] }]
+      security: [{ clerkSession: [] }, { workerSession: [] }]
       summary: List the signed-in worker's tips
       responses:
         "200":
@@ -122,7 +184,7 @@ paths:
     get:
       operationId: listWorkerPayouts
       tags: [worker]
-      security: [{ clerkSession: [] }]
+      security: [{ clerkSession: [] }, { workerSession: [] }]
       summary: List the signed-in worker's payroll payout records
       responses:
         "200":
@@ -138,7 +200,7 @@ paths:
     get:
       operationId: getWorkerBadge
       tags: [worker]
-      security: [{ clerkSession: [] }]
+      security: [{ clerkSession: [] }, { workerSession: [] }]
       summary: Get the worker's QR badge details
       responses:
         "200":
@@ -212,7 +274,26 @@ paths:
           description: Worker created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Worker" }
+              schema: { $ref: "#/components/schemas/WorkerCreated" }
+        "401":
+          description: Authentication required
+  /company/workers/{workerId}/temporary-password:
+    post:
+      operationId: issueWorkerTemporaryPassword
+      tags: [company]
+      security: [{ clerkSession: [] }]
+      summary: Issue a new one-time worker password
+      parameters:
+        - name: workerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Temporary password issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemporaryPasswordResponse" }
         "401":
           description: Authentication required
   /company/workers/{workerId}:
@@ -342,6 +423,10 @@ components:
       type: apiKey
       in: cookie
       name: __session
+    workerSession:
+      type: apiKey
+      in: cookie
+      name: sanad_worker_session
   schemas:
     HealthStatus:
       type: object
@@ -417,25 +502,32 @@ components:
         isDemo: { type: boolean }
     Worker:
       type: object
-      required: [id, slug, name, role, branch, status, totalTipsFils, isDemo]
+      required: [id, slug, name, phoneNumber, role, branch, status, totalTipsFils, isDemo]
       properties:
         id: { type: string }
         slug: { type: string }
         name: { type: string }
         arabicName: { type: ["string", "null"] }
         email: { type: ["string", "null"], format: email }
+        phoneNumber: { type: ["string", "null"] }
         role: { type: string }
         branch: { type: ["string", "null"] }
         status: { type: string, enum: [active, inactive, invited] }
         totalTipsFils: { type: integer }
         isDemo: { type: boolean }
+    WorkerCreated:
+      type: object
+      required: [worker, temporaryPassword]
+      properties:
+        worker: { $ref: "#/components/schemas/Worker" }
+        temporaryPassword: { type: string }
     WorkerInput:
       type: object
-      required: [name, role]
+      required: [name, phoneNumber, role]
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         arabicName: { type: ["string", "null"], maxLength: 120 }
-        email: { type: ["string", "null"], format: email }
+        phoneNumber: { type: string, minLength: 8, maxLength: 20 }
         role: { type: string, minLength: 1, maxLength: 120 }
         branch: { type: ["string", "null"], maxLength: 120 }
     WorkerUpdate:
@@ -447,6 +539,34 @@ components:
         role: { type: string, minLength: 1, maxLength: 120 }
         branch: { type: ["string", "null"], maxLength: 120 }
         status: { type: string, enum: [active, inactive, invited] }
+    WorkerLoginInput:
+      type: object
+      required: [phoneNumber, password]
+      properties:
+        phoneNumber: { type: string, minLength: 8, maxLength: 20 }
+        password: { type: string, minLength: 1, maxLength: 128 }
+    WorkerPasswordInput:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword: { type: string, minLength: 12, maxLength: 128 }
+    WorkerAuthStatus:
+      type: object
+      required: [authenticated, passwordChangeRequired, workerName]
+      properties:
+        authenticated: { type: boolean }
+        passwordChangeRequired: { type: boolean }
+        workerName: { type: ["string", "null"] }
+    WorkerSignoutResult:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean }
+    TemporaryPasswordResponse:
+      type: object
+      required: [temporaryPassword]
+      properties:
+        temporaryPassword: { type: string }
     WorkerDashboard:
       type: object
       required: [worker, totalTipsFils, pendingTipsFils, paidTipsFils, monthTipsFils, averageRating, monthly, recentTransactions, isDemo]

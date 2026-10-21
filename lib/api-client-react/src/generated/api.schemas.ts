@@ -163,12 +163,19 @@ export interface Worker {
   arabicName?: string | null;
   /** @nullable */
   email?: string | null;
+  /** @nullable */
+  phoneNumber: string | null;
   role: string;
   /** @nullable */
   branch: string | null;
   status: WorkerStatus;
   totalTipsFils: number;
   isDemo: boolean;
+}
+
+export interface WorkerCreated {
+  worker: Worker;
+  temporaryPassword: string;
 }
 
 export interface WorkerInput {
@@ -182,8 +189,11 @@ export interface WorkerInput {
      * @nullable
      */
   arabicName?: string | null;
-  /** @nullable */
-  email?: string | null;
+  /**
+     * @minLength 8
+     * @maxLength 20
+     */
+  phoneNumber: string;
   /**
      * @minLength 1
      * @maxLength 120
@@ -229,6 +239,42 @@ export interface WorkerUpdate {
      */
   branch?: string | null;
   status?: WorkerUpdateStatus;
+}
+
+export interface WorkerLoginInput {
+  /**
+     * @minLength 8
+     * @maxLength 20
+     */
+  phoneNumber: string;
+  /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  password: string;
+}
+
+export interface WorkerPasswordInput {
+  /**
+     * @minLength 12
+     * @maxLength 128
+     */
+  newPassword: string;
+}
+
+export interface WorkerAuthStatus {
+  authenticated: boolean;
+  passwordChangeRequired: boolean;
+  /** @nullable */
+  workerName: string | null;
+}
+
+export interface WorkerSignoutResult {
+  success: boolean;
+}
+
+export interface TemporaryPasswordResponse {
+  temporaryPassword: string;
 }
 
 export interface MonthlyValue {

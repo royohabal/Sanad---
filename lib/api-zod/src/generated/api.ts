@@ -81,6 +81,65 @@ export const GetTipStatusResponse = zod.object({
 
 
 /**
+ * @summary Sign in a worker with a phone number and password
+ */
+export const workerLoginBodyPhoneNumberMin = 8;
+export const workerLoginBodyPhoneNumberMax = 20;
+
+export const workerLoginBodyPasswordMax = 128;
+
+
+
+export const WorkerLoginBody = zod.object({
+  "phoneNumber": zod.string().min(workerLoginBodyPhoneNumberMin).max(workerLoginBodyPhoneNumberMax),
+  "password": zod.string().min(1).max(workerLoginBodyPasswordMax)
+})
+
+export const WorkerLoginResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "passwordChangeRequired": zod.boolean(),
+  "workerName": zod.string().nullable()
+})
+
+
+/**
+ * @summary Check the current worker session
+ */
+export const GetWorkerAuthSessionResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "passwordChangeRequired": zod.boolean(),
+  "workerName": zod.string().nullable()
+})
+
+
+/**
+ * @summary Set a worker password after first sign-in
+ */
+export const changeWorkerPasswordBodyNewPasswordMin = 12;
+export const changeWorkerPasswordBodyNewPasswordMax = 128;
+
+
+
+export const ChangeWorkerPasswordBody = zod.object({
+  "newPassword": zod.string().min(changeWorkerPasswordBodyNewPasswordMin).max(changeWorkerPasswordBodyNewPasswordMax)
+})
+
+export const ChangeWorkerPasswordResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "passwordChangeRequired": zod.boolean(),
+  "workerName": zod.string().nullable()
+})
+
+
+/**
+ * @summary End the current worker session
+ */
+export const WorkerLogoutResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary Get the signed-in worker's earnings summary
  */
 export const GetWorkerDashboardResponse = zod.object({
@@ -90,6 +149,7 @@ export const GetWorkerDashboardResponse = zod.object({
   "name": zod.string(),
   "arabicName": zod.string().nullish(),
   "email": zod.string().email().nullish(),
+  "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
   "status": zod.enum(['active', 'inactive', 'invited']),
@@ -236,6 +296,7 @@ export const ListCompanyWorkersResponseItem = zod.object({
   "name": zod.string(),
   "arabicName": zod.string().nullish(),
   "email": zod.string().email().nullish(),
+  "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
   "status": zod.enum(['active', 'inactive', 'invited']),
@@ -252,6 +313,9 @@ export const createCompanyWorkerBodyNameMax = 120;
 
 export const createCompanyWorkerBodyArabicNameMax = 120;
 
+export const createCompanyWorkerBodyPhoneNumberMin = 8;
+export const createCompanyWorkerBodyPhoneNumberMax = 20;
+
 export const createCompanyWorkerBodyRoleMax = 120;
 
 export const createCompanyWorkerBodyBranchMax = 120;
@@ -261,22 +325,38 @@ export const createCompanyWorkerBodyBranchMax = 120;
 export const CreateCompanyWorkerBody = zod.object({
   "name": zod.string().min(1).max(createCompanyWorkerBodyNameMax),
   "arabicName": zod.string().max(createCompanyWorkerBodyArabicNameMax).nullish(),
-  "email": zod.string().email().nullish(),
+  "phoneNumber": zod.string().min(createCompanyWorkerBodyPhoneNumberMin).max(createCompanyWorkerBodyPhoneNumberMax),
   "role": zod.string().min(1).max(createCompanyWorkerBodyRoleMax),
   "branch": zod.string().max(createCompanyWorkerBodyBranchMax).nullish()
 })
 
 export const CreateCompanyWorkerResponse = zod.object({
+  "worker": zod.object({
   "id": zod.string(),
   "slug": zod.string(),
   "name": zod.string(),
   "arabicName": zod.string().nullish(),
   "email": zod.string().email().nullish(),
+  "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
   "status": zod.enum(['active', 'inactive', 'invited']),
   "totalTipsFils": zod.number().int(),
   "isDemo": zod.boolean()
+}),
+  "temporaryPassword": zod.string()
+})
+
+
+/**
+ * @summary Issue a new one-time worker password
+ */
+export const IssueWorkerTemporaryPasswordParams = zod.object({
+  "workerId": zod.coerce.string()
+})
+
+export const IssueWorkerTemporaryPasswordResponse = zod.object({
+  "temporaryPassword": zod.string()
 })
 
 
@@ -312,6 +392,7 @@ export const UpdateCompanyWorkerResponse = zod.object({
   "name": zod.string(),
   "arabicName": zod.string().nullish(),
   "email": zod.string().email().nullish(),
+  "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
   "status": zod.enum(['active', 'inactive', 'invited']),

@@ -17,8 +17,11 @@ export interface WorkerInput {
      * @nullable
      */
   arabicName?: string | null;
-  /** @nullable */
-  email?: string | null;
+  /**
+     * @minLength 8
+     * @maxLength 20
+     */
+  phoneNumber: string;
   /**
      * @minLength 1
      * @maxLength 120

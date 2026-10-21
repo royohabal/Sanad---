@@ -81,6 +81,11 @@ export const workersTable = pgTable(
     name: text("name").notNull(),
     arabicName: text("arabic_name"),
     email: text("email"),
+    phoneNumber: text("phone_number"),
+    workerPasswordHash: text("worker_password_hash"),
+    passwordChangeRequired: boolean("password_change_required")
+      .notNull()
+      .default(false),
     role: text("role").notNull(),
     branch: text("branch"),
     photoUrl: text("photo_url"),
@@ -97,8 +102,30 @@ export const workersTable = pgTable(
   (table) => [
     uniqueIndex("sanad_workers_slug_idx").on(table.slug),
     uniqueIndex("sanad_workers_clerk_user_idx").on(table.clerkUserId),
+    uniqueIndex("sanad_workers_phone_number_idx").on(table.phoneNumber),
     index("sanad_workers_company_idx").on(table.companyId),
     index("sanad_workers_email_idx").on(table.email),
+  ],
+);
+
+export const workerAuthSessionsTable = pgTable(
+  "sanad_worker_auth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workerId: uuid("worker_id")
+      .notNull()
+      .references(() => workersTable.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    state: text("state").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sanad_worker_auth_sessions_token_idx").on(table.tokenHash),
+    index("sanad_worker_auth_sessions_worker_idx").on(table.workerId),
+    index("sanad_worker_auth_sessions_expiry_idx").on(table.expiresAt),
   ],
 );
 

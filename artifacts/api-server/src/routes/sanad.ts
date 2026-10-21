@@ -18,6 +18,14 @@ import {
   workersTable,
 } from "@workspace/db";
 import {
+  generateTemporaryPassword,
+  getActiveWorkerForRequest,
+  hashWorkerPassword,
+  issueTemporaryWorkerPassword,
+  normalizePhoneNumber,
+  revokeWorkerSessions,
+} from "../lib/workerAuth";
+import {
   CreateCompanyPayoutBody,
   CreateCompanyProfileBody,
   CreateCompanyWorkerBody,
@@ -35,6 +43,7 @@ import {
   GetTipStatusResponse,
   GetWorkerBadgeResponse,
   GetWorkerDashboardResponse,
+  IssueWorkerTemporaryPasswordResponse,
   ListCompanyPayoutsResponse,
   ListCompanyTransactionsResponse,
   ListCompanyWorkersResponse,
@@ -114,6 +123,22 @@ async function workerForUser(userId: string) {
   if (!linked) return null;
   await writeAudit(worker.companyId, userId, "worker.invitation.accepted", "worker", worker.id);
   return linked;
+}
+
+async function currentWorker(req: Request, res: Response) {
+  const sessionWorker = await getActiveWorkerForRequest(req);
+  if (sessionWorker) return sessionWorker;
+  const userId = getAuth(req).userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return null;
+  }
+  const worker = await workerForUser(userId);
+  if (!worker) {
+    res.status(403).json({ error: "No worker profile is linked to this account" });
+    return null;
+  }
+  return worker;
 }
 
 async function writeAudit(
@@ -675,13 +700,8 @@ router.get("/tips/:tipId", async (req, res): Promise<void> => {
 });
 
 router.get("/worker/dashboard", async (req, res): Promise<void> => {
-  const userId = currentUserId(req, res);
-  if (!userId) return;
-  const worker = await workerForUser(userId);
-  if (!worker) {
-    res.status(403).json({ error: "No worker profile is linked to this account" });
-    return;
-  }
+  const worker = await currentWorker(req, res);
+  if (!worker) return;
   const [company] = await db
     .select({ name: companiesTable.name })
     .from(companiesTable)
@@ -731,6 +751,7 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
     name: worker.name,
     arabicName: worker.arabicName,
     email: worker.email,
+    phoneNumber: worker.phoneNumber,
     role: worker.role,
     branch: worker.branch,
     status: worker.status,
@@ -753,13 +774,8 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
 });
 
 router.get("/worker/transactions", async (req, res): Promise<void> => {
-  const userId = currentUserId(req, res);
-  if (!userId) return;
-  const worker = await workerForUser(userId);
-  if (!worker) {
-    res.status(403).json({ error: "No worker profile is linked to this account" });
-    return;
-  }
+  const worker = await currentWorker(req, res);
+  if (!worker) return;
   const rows = await db
     .select({
       id: tipsTable.id,
@@ -780,13 +796,8 @@ router.get("/worker/transactions", async (req, res): Promise<void> => {
 });
 
 router.get("/worker/payouts", async (req, res): Promise<void> => {
-  const userId = currentUserId(req, res);
-  if (!userId) return;
-  const worker = await workerForUser(userId);
-  if (!worker) {
-    res.status(403).json({ error: "No worker profile is linked to this account" });
-    return;
-  }
+  const worker = await currentWorker(req, res);
+  if (!worker) return;
   const rows = await db
     .select({
       id: payoutsTable.id,
@@ -807,13 +818,8 @@ router.get("/worker/payouts", async (req, res): Promise<void> => {
 });
 
 router.get("/worker/badge", async (req, res): Promise<void> => {
-  const userId = currentUserId(req, res);
-  if (!userId) return;
-  const worker = await workerForUser(userId);
-  if (!worker) {
-    res.status(403).json({ error: "No worker profile is linked to this account" });
-    return;
-  }
+  const worker = await currentWorker(req, res);
+  if (!worker) return;
   const [company] = await db
     .select({ name: companiesTable.name })
     .from(companiesTable)
@@ -977,6 +983,7 @@ router.get("/company/workers", async (req, res): Promise<void> => {
       name: worker.name,
       arabicName: worker.arabicName,
       email: worker.email,
+      phoneNumber: worker.phoneNumber,
       role: worker.role,
       branch: worker.branch,
       status: worker.status,
@@ -1000,60 +1007,96 @@ router.post("/company/workers", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
+  const phoneNumber = normalizePhoneNumber(body.data.phoneNumber);
+  if (!phoneNumber) {
+    res.status(400).json({ error: "Enter a valid phone number, including its country code." });
+    return;
+  }
   const workerId = randomUUID();
-  const email = body.data.email?.toLowerCase() ?? null;
-  let clerkInvitationId: string | null = null;
-  if (email) {
-    try {
-      const invitation = await clerkClient.invitations.createInvitation({
-        emailAddress: email,
-        redirectUrl: makeUrl(req, "/worker"),
-        publicMetadata: { companyId: membership.companyId, workerId, role: "worker" },
-        ignoreExisting: false,
-      });
-      clerkInvitationId = invitation.id;
-    } catch (error) {
-      req.log.warn({ err: error }, "Could not send worker invitation");
-      res.status(502).json({ error: "The worker invitation could not be sent" });
+  const temporaryPassword = generateTemporaryPassword();
+  const workerPasswordHash = await hashWorkerPassword(temporaryPassword);
+  const slug = `${body.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${randomUUID().slice(0, 6)}`;
+  let worker: typeof workersTable.$inferSelect | undefined;
+  try {
+    [worker] = await db
+      .insert(workersTable)
+      .values({
+        id: workerId,
+        companyId: membership.companyId,
+        slug,
+        name: body.data.name.trim(),
+        arabicName: body.data.arabicName ?? null,
+        phoneNumber,
+        workerPasswordHash,
+        passwordChangeRequired: true,
+        email: null,
+        role: body.data.role.trim(),
+        branch: body.data.branch ?? null,
+        status: "active",
+        isDemo: false,
+      })
+      .returning();
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      res.status(409).json({ error: "A worker account already uses this phone number." });
       return;
     }
+    throw error;
   }
-  const slug = `${body.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${randomUUID().slice(0, 6)}`;
-  const [worker] = await db
-    .insert(workersTable)
-    .values({
-      id: workerId,
-      companyId: membership.companyId,
-      clerkInvitationId,
-      slug,
-      name: body.data.name.trim(),
-      arabicName: body.data.arabicName ?? null,
-      email,
-      role: body.data.role.trim(),
-      branch: body.data.branch ?? null,
-      status: email ? "invited" : "active",
-      isDemo: false,
-    })
-    .returning();
   if (!worker) {
     res.status(500).json({ error: "Could not create worker profile" });
     return;
   }
-  await writeAudit(membership.companyId, userId, "worker.created", "worker", worker.id, { invited: !!email });
+  await writeAudit(membership.companyId, userId, "worker.created", "worker", worker.id);
   res.status(201).json(
     CreateCompanyWorkerResponse.parse({
-      id: worker.id,
-      slug: worker.slug,
-      name: worker.name,
-      arabicName: worker.arabicName,
-      email: worker.email,
-      role: worker.role,
-      branch: worker.branch,
-      status: worker.status,
-      totalTipsFils: 0,
-      isDemo: worker.isDemo,
+      worker: {
+        id: worker.id,
+        slug: worker.slug,
+        name: worker.name,
+        arabicName: worker.arabicName,
+        email: worker.email,
+        phoneNumber: worker.phoneNumber,
+        role: worker.role,
+        branch: worker.branch,
+        status: worker.status,
+        totalTipsFils: 0,
+        isDemo: worker.isDemo,
+      },
+      temporaryPassword,
     }),
   );
+});
+
+router.post("/company/workers/:workerId/temporary-password", async (req, res): Promise<void> => {
+  const userId = currentUserId(req, res);
+  if (!userId) return;
+  const params = UpdateCompanyWorkerParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const membership = await companyMembership(userId);
+  if (!membership) {
+    res.status(404).json({ error: "Company profile not found" });
+    return;
+  }
+  const [worker] = await db
+    .select()
+    .from(workersTable)
+    .where(and(eq(workersTable.id, params.data.workerId), eq(workersTable.companyId, membership.companyId)))
+    .limit(1);
+  if (!worker) {
+    res.status(404).json({ error: "Worker not found" });
+    return;
+  }
+  if (worker.status !== "active") {
+    res.status(409).json({ error: "Activate this worker before issuing a password." });
+    return;
+  }
+  const temporaryPassword = await issueTemporaryWorkerPassword(worker.id);
+  await writeAudit(membership.companyId, userId, "worker.password.reset", "worker", worker.id);
+  res.json(IssueWorkerTemporaryPasswordResponse.parse({ temporaryPassword }));
 });
 
 router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
@@ -1085,6 +1128,7 @@ router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
+  if (worker.status === "inactive") await revokeWorkerSessions(worker.id);
   await writeAudit(membership.companyId, userId, "worker.updated", "worker", worker.id, {
     changedFields: Object.keys(body.data),
   });
@@ -1095,6 +1139,7 @@ router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
       name: worker.name,
       arabicName: worker.arabicName,
       email: worker.email,
+      phoneNumber: worker.phoneNumber,
       role: worker.role,
       branch: worker.branch,
       status: worker.status,

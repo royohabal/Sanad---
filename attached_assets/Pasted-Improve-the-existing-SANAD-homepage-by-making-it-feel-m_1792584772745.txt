@@ -1,0 +1,56 @@
+Improve the existing SANAD homepage by making it feel more interactive, polished, and memorable while preserving its current visual identity.
+
+**DESIGN DIRECTION**
+Keep the current burgundy, coral, and warm cream palette, typography, Arabic SANAD logo, spacious layout, and premium minimalist fintech aesthetic. The existing design is already strong, so refine it rather than replacing it with a completely different template. Avoid clutter, excessive text, generic AI-looking sections, and unnecessary gradients.
+
+**1. HERO ANIMATIONS**
+- Animate the headline on initial page load with a subtle staggered fade-in and upward movement.
+- Give the large SANAD Arabic logo a gentle floating animation with a soft shifting shadow.
+- Add a subtle coral glow or small tilt on desktop hover, without making the logo distracting.
+- Add polished hover and press states to the “Tip Now,” “Get started,” and company buttons. Animate the arrow icons slightly on hover.
+- Keep animations smooth and lightweight.
+
+**2. SCROLL REVEALS**
+- Use Intersection Observer or the project's existing animation library to reveal section headings, descriptions, checklist items, and cards as they enter the viewport.
+- Use subtle opacity and translateY transitions, with small stagger delays for grouped items.
+- Trigger each reveal once.
+- Avoid animating every paragraph separately or making users wait for content to appear.
+
+**3. ADD A COMPACT ‘HOW IT WORKS’ SECTION**
+Place a small section between the hero and guest section with three steps:
+1. Scan the worker's QR code.
+2. Choose a tip amount and optionally rate the experience.
+3. Complete secure checkout.
+Use simple icons, concise labels, and a subtle animated connector. Make the layout responsive and compact.
+
+**4. ADD AN INTERACTIVE TIPPING DEMO**
+Create an optional, clearly labeled demo that lets visitors:
+- Choose between a few sample tip amounts.
+- See the selected amount update immediately.
+- Optionally select a star rating.
+- Preview a friendly confirmation state.
+This must be a simulation only. Do not create a real Stripe session, charge a card, write fake transactions to the database, or misrepresent demo data as real. Link to the actual tipping flow separately.
+
+**5. IMPROVE THE COMPANY PREVIEW CARD**
+Refine the existing ‘A personal badge’ preview to show a visually appealing sample worker QR badge and a compact dashboard preview. Add a subtle hover lift and a clear link to the company section or sign-up route. Label sample information as a preview, not real data.
+
+**6. MICROINTERACTIONS**
+- Smooth transitions for the Arabic/English language switch.
+- Active, hover, focus, and pressed states for all interactive elements.
+- Subtle card lift and shadow changes.
+- Smooth accordion animation for a compact three-question FAQ.
+- Ensure every visible button and link has a real, working action.
+
+**7. RESPONSIVENESS AND ACCESSIBILITY**
+- Preserve the existing responsive layout and ensure all interactions work on mobile and desktop.
+- Respect prefers-reduced-motion and provide reduced or disabled animations when requested.
+- Maintain readable contrast, keyboard navigation, visible focus indicators, and accessible button labels.
+- Do not make animations block clicks or delay access to page content.
+
+**IMPORTANT CONSTRAINTS**
+- Inspect the existing project and reuse its framework, components, routes, and animation libraries where appropriate.
+- Preserve the existing database, authentication, QR code functionality, Stripe/payment integrations, and all working routes.
+- Do not replace existing working functionality with mock data or demo implementations.
+- Keep the homepage concise and avoid adding unnecessary sections.
+- Do not redesign the worker or company dashboards as part of this task unless required to make existing navigation work.
+- Test all links, buttons, demo interactions, language switching, and mobile layouts after implementing the changes.

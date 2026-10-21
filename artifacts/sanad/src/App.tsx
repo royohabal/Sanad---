@@ -1,15 +1,15 @@
-import { useEffect, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useRef, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
 import './sanad.css';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { ClerkProvider, SignIn, SignUp, Show } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useAuth } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QRCodeSVG } from 'qrcode.react';
 import { Route, Switch, Router as WouterRouter, Link, Redirect, useLocation, useRoute } from 'wouter';
 import {
   ArrowDownLeft, ArrowUpRight, BadgeCheck, Banknote, BarChart3, Check, ChevronDown, ChevronRight,
-  CircleHelp, Clock3, Copy, Download, FileText, Globe2, Heart, LayoutDashboard, Menu,
-  QrCode, Search, Settings, ShieldCheck, Sparkles, Star, Users, Wallet, X
+  CircleHelp, Clock3, Copy, Download, FileText, Globe2, Handshake, Heart, KeyRound, LayoutDashboard, LogIn, LogOut, Menu,
+  Phone, QrCode, Search, Settings, ShieldCheck, Sparkles, Star, Users, Wallet, X
 } from 'lucide-react';
 import {
   useGetPublicWorker, getGetPublicWorkerQueryKey, useCreateTipCheckout, useGetTipStatus,
@@ -20,7 +20,9 @@ import {
   useListCompanyWorkers, getListCompanyWorkersQueryKey, useCreateCompanyWorker,
   useUpdateCompanyWorker, useListCompanyTransactions, getListCompanyTransactionsQueryKey,
   useListCompanyPayouts, getListCompanyPayoutsQueryKey, useCreateCompanyPayout,
-  useUpdateCompanyPayoutStatus, useGetCompanyReport, getGetCompanyReportQueryKey
+  useUpdateCompanyPayoutStatus, useGetCompanyReport, getGetCompanyReportQueryKey,
+  useWorkerLogin, useGetWorkerAuthSession, getGetWorkerAuthSessionQueryKey,
+  useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword
 } from '@workspace/api-client-react';
 import type { PayoutRecord, TipTransaction } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -122,7 +124,7 @@ const arabicCopy: Record<string, string> = {
   'Company manager':'مدير الشركة','Service team':'فريق الخدمة','A little recognition adds up':'التقدير يصنع فرقاً',
   'Good to see you,':'يسعدنا وجودك،','Your service is making a difference. Here’s how it’s adding up.':'خدمتك تصنع فرقاً. إليك ملخص تقدير الضيوف.',
   'Tips received':'الإكراميات المستلمة','This month':'هذا الشهر','Awaiting payout':'بانتظار التسجيل في الرواتب',
-  'Guest rating':'تقييم الضيوف','All time':'الإجمالي','Since the 1st':'منذ بداية الشهر','Not yet in payroll':'لم تُسجل في الرواتب بعد',
+  'Guest rating':'تقييم الضيوف','Average rating':'متوسط التقييم','No ratings yet':'لا توجد تقييمات بعد','All time':'الإجمالي','Since the 1st':'منذ بداية الشهر','Not yet in payroll':'لم تُسجل في الرواتب بعد',
   'From your guests':'من ضيوفك','Monthly overview':'ملخص شهري','A MOMENT TO NOTICE':'لحظة تستحق التقدير',
   'Your good work':'عملك الرائع','is being noticed.':'محل تقدير.','Every tip is a guest taking a moment to say your care mattered.':'كل إكرامية هي رسالة تقدير من ضيف لخدمتك.',
   'See all your tips':'عرض جميع الإكراميات','RECENT KINDNESS':'أحدث رسائل التقدير','Latest tips':'أحدث الإكراميات',
@@ -180,7 +182,11 @@ const arabicCopy: Record<string, string> = {
   'Your company details stay within your workspace.':'تبقى بيانات شركتك ضمن مساحة العمل الخاصة بك.',
   'GROW YOUR TEAM':'وسّع فريقك','Add a worker':'إضافة موظف','We’ll create their SANAD profile and personal QR link.':'سننشئ ملفه في سند ورمز QR الشخصي.',
   'Full name':'الاسم الكامل','Role':'المسمى الوظيفي','Branch':'الفرع','e.g. Faisal Al-Rashid':'مثال: فيصل الراشد',
-  'No email added':'لم يضف بريداً إلكترونياً','No branch':'لا يوجد فرع','Pause':'إيقاف مؤقت','Activate':'تفعيل',
+  'Phone number':'رقم الهاتف','No phone number':'لا يوجد رقم هاتف','Reset password':'إعادة تعيين كلمة المرور',
+  'WORKER LOGIN':'دخول الموظف','Sign out':'تسجيل الخروج','No email added':'لم يضف بريداً إلكترونياً','No branch':'لا يوجد فرع','Pause':'إيقاف مؤقت','Activate':'تفعيل',
+  'Give this temporary password to the worker directly. It is shown only once.':'سلّم كلمة المرور المؤقتة للموظف مباشرةً. ستظهر مرة واحدة فقط.',
+  'The worker signs in with their phone number and changes this password at first sign-in.':'يسجّل الموظف الدخول برقم هاتفه ويغيّر كلمة المرور عند أول دخول.',
+  'Couldn’t add this worker. Check the phone number and try again.':'تعذرت إضافة الموظف. تحقق من رقم الهاتف وحاول مجدداً.',
   'Barista':'باريستا','Salmiya':'السالمية',
   'No team members found':'لم يتم العثور على أعضاء الفريق','Try another name or add your first worker.':'جرّب اسماً آخر أو أضف أول موظف.',
   'Adding worker…':'جارٍ إضافة الموظف…','Could not add this worker. Please check the details.':'تعذرت إضافة الموظف. تحقق من البيانات.',
@@ -254,7 +260,7 @@ function LanguageToggle() {
   return <button data-testid="button-language" className="language-toggle" onClick={toggle} aria-label="Switch language"><Globe2 size={15}/><span>{language === 'en' ? 'العربية' : 'English'}</span></button>;
 }
 function Brand({ light = false }: { light?: boolean }) {
-  return <Link href="/" className={`brand ${light ? 'brand-light' : ''}`} data-testid="link-brand"><span className="brand-mark">س</span><span>SANAD<span className="brand-dot">.</span></span></Link>;
+  return <Link href="/" className={`brand ${light ? 'brand-light' : ''}`} data-testid="link-brand"><span className="brand-mark"><Handshake aria-hidden="true" strokeWidth={2.1}/></span><span>SANAD<span className="brand-dot">.</span></span></Link>;
 }
 function DemoFlag({ demo }: { demo?: boolean }) {
   const { language } = useLanguage();
@@ -288,28 +294,77 @@ function Metric({ label, value, caption, icon: Icon, accent = false }: { label: 
 }
 function Header() {
   const { language } = useLanguage();
-  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#tip-now">{language === 'ar' ? 'للضيوف' : 'For guests'}</a><a href="#for-business">{language === 'ar' ? 'للشركات' : 'For business'}</a><Link href="/sign-in">{language === 'ar' ? 'تسجيل الدخول' : 'Sign in'}</Link></nav><div className="header-actions"><LanguageToggle/><Link className="header-signup" href="/sign-up">{language === 'ar' ? 'ابدأ الآن' : 'Get started'} <ArrowUpRight size={15}/></Link></div></header>;
+  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#tip-now" data-testid="link-nav-guests">{language === 'ar' ? 'للضيوف' : 'For guests'}</a><a href="#for-business" data-testid="link-nav-business">{language === 'ar' ? 'للشركات' : 'For business'}</a></nav><div className="header-actions"><LanguageToggle/><Link className="header-worker-signin" href="/worker/sign-in" aria-label={language === 'ar' ? 'تسجيل دخول العامل' : 'Worker sign in'} data-testid="link-sign-in"><LogIn size={14}/><span className="worker-signin-full">{language === 'ar' ? 'تسجيل دخول العامل' : 'Worker sign in'}</span><span className="worker-signin-compact">{language === 'ar' ? 'العامل' : 'Worker'}</span></Link><Link className="header-signup" href="/sign-up" data-testid="link-get-started">{language === 'ar' ? 'ابدأ الآن' : 'Get started'} <ArrowUpRight size={15}/></Link></div></header>;
 }
 function Landing() {
   const { language } = useLanguage();
   const ar = language === 'ar';
-  return <LocalizedTree><main className="landing">
+  const previousLanguage = useRef(language);
+  const [demoAmount, setDemoAmount] = useState(1);
+  const [demoRating, setDemoRating] = useState<number | null>(null);
+  const [demoComplete, setDemoComplete] = useState(false);
+  const [languageSwitching, setLanguageSwitching] = useState(false);
+  useEffect(() => {
+    if (previousLanguage.current === language) return;
+    previousLanguage.current = language;
+    setLanguageSwitching(true);
+    const timeout = window.setTimeout(() => setLanguageSwitching(false), 220);
+    return () => window.clearTimeout(timeout);
+  }, [language]);
+  useEffect(() => {
+    const nodes = document.querySelectorAll('.landing-reveal');
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      nodes.forEach((node) => node.classList.add('is-visible'));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+  const demoAmounts = ['0.500', '1.000', '2.000'];
+  return <LocalizedTree><main className={`landing ${languageSwitching ? 'language-switching' : ''}`}>
     <Header/>
     <section className="hero-wrap landing-compact">
-      <div className="hero-copy rise"><div className="eyebrow"><span className="eyebrow-dot"/> KUWAIT · DIGITAL TIPPING</div>
+      <div className="hero-copy landing-hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> {ar ? 'الكويت · إكراميات رقمية' : 'KUWAIT · DIGITAL TIPPING'}</div>
         <h1>{ar ? <>شكراً،<br/><em>بطريقة أسهل.</em></> : <>A simple way<br/>to say <em>thank you.</em></>}</h1>
-        <p>{ar ? 'قدّر من جعل يومك أفضل. امسح رمز سند وادفع بأمان خلال ثوانٍ.' : 'Thank the person who made your day. Scan their SANAD code and pay securely in seconds.'}</p>
-        <div className="hero-actions"><Link href="/tip/ahmed-almutairi" className="cta-primary" data-testid="link-tip-now">{ar ? 'أرسل إكرامية' : 'Tip Now'} <ArrowUpRight size={17}/></Link><Link href="/sign-up" className="cta-quiet">{ar ? 'للشركات' : 'For companies'} <ChevronRight size={16}/></Link></div>
+        <div className="hero-actions"><Link href="/tip/ahmed-almutairi" className="cta-primary" data-testid="link-tip-now">{ar ? 'أرسل إكرامية' : 'Tip Now'} <ArrowUpRight size={17}/></Link><Link href="/sign-up" className="cta-quiet" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For companies'} <ChevronRight size={16}/></Link></div>
         <div className="trust-note"><ShieldCheck size={16}/><span>{ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed'}</span></div>
       </div>
-      <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark">س</div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
+      <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark"><Handshake className="landing-handshake" strokeWidth={1.45}/></div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
     </section>
-    <section id="tip-now" className="landing-tip-band"><div><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{ar ? 'اختر المبلغ، أضف تقييماً إن رغبت، ثم ادفع بأمان.' : 'Choose an amount, add an optional rating, then check out securely.'}</p></div><div className="landing-trust"><ShieldCheck size={19}/><span>{ar ? 'لا تسجيل. لا خطوات إضافية.' : 'No sign-up. No extra steps.'}</span></div></section>
-    <section id="for-business" className="business-section landing-business"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? 'تقدير أوضح،<br/>لفريقك.' : <>A clearer way<br/>to value <em>your team.</em></>}</h2><p>{ar ? 'رموز شخصية وسجل واضح للإكراميات والرواتب.' : 'Personal QR badges and clear tip and payroll records for your team.'}</p><ul><li><BadgeCheck/>Personal QR badges</li><li><BadgeCheck/>Tip and payroll records</li></ul><Link href="/sign-up" className="business-link">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div><div className="business-panel business-panel-simple"><div className="panel-topline"><span>SANAD FOR TEAMS</span><span className="panel-dot"/></div><div className="business-stat"><span>{ar ? 'لكل فرد في الفريق' : 'For every team member'}</span><strong>{ar ? 'رمز شخصي' : 'A personal badge'}</strong><small><ShieldCheck size={14}/> {ar ? 'سجلات واضحة' : 'Clear records'}</small></div><div className="business-rule"/></div></section>
+    <section className="how-section landing-reveal" aria-labelledby="how-title">
+      <div className="how-heading"><span className="eyebrow">{ar ? 'بكل بساطة' : 'THOUGHTFULLY SIMPLE'}</span><h2 id="how-title">{ar ? 'ثلاث خطوات، وشكر يصل.' : 'Three steps. A thank you delivered.'}</h2></div>
+      <div className="how-steps">
+        <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>01</small><h3>{ar ? 'امسح الرمز' : 'Scan the badge'}</h3><p>{ar ? 'امسح رمز الموظف لفتح صفحة سند الخاصة به.' : 'Scan the worker’s QR badge to open their SANAD page.'}</p></article>
+        <article className="how-step"><span className="how-icon"><Banknote size={21}/></span><small>02</small><h3>{ar ? 'اختر إكراميتك' : 'Choose your tip'}</h3><p>{ar ? 'اختر المبلغ وأضف تقييماً إن رغبت.' : 'Pick an amount and leave a rating if you like.'}</p></article>
+        <article className="how-step"><span className="how-icon"><ShieldCheck size={21}/></span><small>03</small><h3>{ar ? 'ادفع بأمان' : 'Check out securely'}</h3><p>{ar ? 'أكمل الدفع الآمن دون إنشاء حساب.' : 'Complete secure checkout. No account needed.'}</p></article>
+      </div>
+    </section>
+    <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.'}</p></div><div className="landing-trust"><ShieldCheck size={19}/><span>{ar ? 'لا تسجيل. لا خطوات إضافية.' : 'No sign-up. No extra steps.'}</span></div>
+      <div className="tip-demo" aria-live="polite">
+        <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span><strong>{ar ? 'جرّب إرسال الشكر' : 'Try a little thank you'}</strong></div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
+        {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
+          <div className="demo-amounts" role="group" aria-label={ar ? 'اختر مبلغاً تجريبياً' : 'Choose a sample tip amount'}>{demoAmounts.map((amount, index) => <button key={amount} type="button" data-testid={`button-demo-amount-${amount.replace('.', '-')}`} className={demoAmount === index ? 'selected' : ''} aria-pressed={demoAmount === index} onClick={() => setDemoAmount(index)}>KWD {amount}</button>)}</div>
+          <div className="demo-controls"><div><span>{ar ? 'تقييم اختياري' : 'OPTIONAL RATING'}</span><div className="demo-stars" role="group" aria-label={ar ? 'اختر تقييماً' : 'Choose a rating'}>{[1,2,3,4,5].map((rating) => <button key={rating} type="button" data-testid={`button-demo-rating-${rating}`} aria-label={`${rating} ${ar ? 'نجوم' : rating === 1 ? 'star' : 'stars'}`} aria-pressed={demoRating === rating} onClick={() => setDemoRating(demoRating === rating ? null : rating)}><Star size={17} fill={demoRating && rating <= demoRating ? 'currentColor' : 'none'}/></button>)}</div></div><strong data-testid="text-demo-selected-amount">KWD {demoAmounts[demoAmount]}</strong></div>
+          <button type="button" className="demo-submit" data-testid="button-preview-tip-confirmation" onClick={() => setDemoComplete(true)}>{ar ? 'عرض التأكيد التجريبي' : 'Preview confirmation'} <ArrowUpRight size={15}/></button>
+          <Link href="/tip/ahmed-almutairi" className="real-tip-link" data-testid="link-real-tip">{ar ? 'أرسل إكرامية حقيقية' : 'Send a real tip'} <ArrowUpRight size={14}/></Link>
+        </>}
+      </div>
+    </section>
+    <section id="for-business" className="business-section landing-business landing-reveal"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? <>تقدير أوضح،<br/>لفريقك.</> : <>A clearer way<br/>to value <em>your team.</em></>}</h2><p>{ar ? 'رموز شخصية وسجل واضح للإكراميات والرواتب.' : 'Personal QR badges and clear tip and payroll records for your team.'}</p><ul><li><BadgeCheck/>{ar ? 'رموز QR شخصية لكل موظف' : 'Personal QR badges for every worker'}</li><li><BadgeCheck/>{ar ? 'سجلات واضحة للإكراميات والرواتب' : 'Clear tip and payroll records'}</li></ul><Link href="/sign-up" className="business-link" data-testid="link-company-signup">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div>
+      <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'أحمد المطيري' : 'Ahmed Almutairi'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">AM</span><span><b>{ar ? 'أحمد المطيري' : 'Ahmed Almutairi'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
+    </section>
     <Footer/>
   </main></LocalizedTree>;
 }
-function Footer() { return <footer className="footer"><Brand/><span>Made with care in Kuwait.</span><div><Link href="/sign-in">Worker sign in</Link><Link href="/sign-up">For companies</Link><span>© SANAD</span></div></footer>; }
+function Footer() { return <footer className="footer"><Brand/><span>Made with care in Kuwait.</span><div><Link href="/worker/sign-in">Worker sign in</Link><Link href="/sign-up">For companies</Link><span>© SANAD</span></div></footer>; }
 function QrGraphic() {
   return <div className="qr-graphic" aria-label="Decorative QR pattern"><div className="qr-corner"/><div className="qr-corner"/><div className="qr-corner"/>{Array.from({length:25}).map((_,i)=><i key={i} className={((i*7+3)%5===0 || (i*13)%7<2)?'qr-dark':''}/>)}</div>;
 }
@@ -378,8 +433,11 @@ const companyNav = [
 ];
 function PortalLayout({ children, company = false, title = 'Overview' }: { children: ReactNode; company?: boolean; title?: string }) {
   const { language } = useLanguage();
-  const [currentLocation] = useLocation();
+  const [currentLocation,setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const workerAccount = useGetWorkerDashboard({ query: { enabled: !company, queryKey: getGetWorkerDashboardQueryKey() } });
+  const workerSession = useGetWorkerAuthSession({ query: { queryKey: getGetWorkerAuthSessionQueryKey(), enabled: !company, retry: false } });
+  const workerLogout = useWorkerLogout();
   const companyAccount = useGetCompanyDashboard({ query: { enabled: company, queryKey: getGetCompanyDashboardQueryKey(), retry: false } });
   const companyProfileMissing = company && companyAccount.isError && isHttp404(companyAccount.error);
   const nav = company ? (companyProfileMissing ? companyNav.slice(0,1) : companyNav) : workerNav;
@@ -394,7 +452,7 @@ function PortalLayout({ children, company = false, title = 'Overview' }: { child
     <aside id="portal-navigation" aria-label={company?'Company navigation':'Worker navigation'} className={`portal-sidebar ${mobileNav?'sidebar-open':''}`}><div className="side-brand"><Brand/><button className="mobile-close" onClick={()=>setMobileNav(false)} aria-label="Close menu"><X size={18}/></button></div>
       <div className="side-profile"><Avatar name={accountName} size="md"/><div><strong>{accountName}</strong><span>{accountRole}</span></div></div>
       <span className="side-section">{companyProfileMissing?'COMPANY SETUP':company?'MANAGE YOUR TEAM':'YOUR SANAD'}</span><nav className="side-nav">{nav.map((item)=>{const active=currentPath===item.href;const Icon=item.icon;return <Link href={item.href} key={item.href} onClick={()=>setMobileNav(false)} className={`side-link ${active?'active':''}`} aria-current={active?'page':undefined} data-testid={`link-nav-${item.href.split('/').pop()}`}><Icon size={17}/><span>{item.label}</span></Link>})}</nav>
-      <div className="sidebar-bottom">{!companyProfileMissing&&<Link href={company?'/company/settings':'/worker/settings'} onClick={()=>setMobileNav(false)} className={`side-link side-secondary ${currentPath===(company?'/company/settings':'/worker/settings')?'active':''}`} data-testid="link-nav-settings"><Settings size={17}/><span>Settings</span></Link>}<div className="sidebar-help"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><span>We’re here to help.</span><a href="mailto:hello@sanad.kw">Get in touch <ArrowUpRight size={12}/></a></div><span className="side-version">SANAD · KUWAIT</span></div>
+       <div className="sidebar-bottom">{!companyProfileMissing&&<Link href={company?'/company/settings':'/worker/settings'} onClick={()=>setMobileNav(false)} className={`side-link side-secondary ${currentPath===(company?'/company/settings':'/worker/settings')?'active':''}`} data-testid="link-nav-settings"><Settings size={17}/><span>Settings</span></Link>}{!company&&workerSession.data?.authenticated&&<button type="button" className="side-link side-secondary side-link-button" data-testid="button-worker-signout" onClick={()=>workerLogout.mutate(undefined,{onSuccess:()=>{queryClient.clear();setLocation('/worker/sign-in')}})}><LogOut size={17}/><span>Sign out</span></button>}<div className="sidebar-help"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><span>We’re here to help.</span><a href="mailto:hello@sanad.kw">Get in touch <ArrowUpRight size={12}/></a></div><span className="side-version">SANAD · KUWAIT</span></div>
     </aside>
     {mobileNav && <button aria-label="Close navigation" className="nav-backdrop" onClick={()=>setMobileNav(false)}/>}
     <div className="portal-main"><header className="portal-header"><button className="mobile-menu" onClick={()=>setMobileNav(true)} aria-label="Open menu" aria-expanded={mobileNav} aria-controls="portal-navigation"><Menu/></button><div><span className="breadcrumb">SANAD <ChevronRight size={12}/> {company?'COMPANY':'WORKER'}</span><h1>{localized(title,language)}</h1></div><div className="portal-header-tools"><LanguageToggle/><div className="top-user">{initials(accountName)}</div></div></header>
@@ -422,7 +480,7 @@ function TransactionTable({ transactions, empty = 'Nothing to show yet.' }: { tr
 function WorkerOverview() {
   const q = useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
   const d=q.data;
-  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&<><div className="metric-grid metric-grid-three"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>}</QueryState></PortalLayout>;
+  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&<><div className="metric-grid"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/><Metric label="Average rating" value={d.averageRating==null?'—':`${d.averageRating.toFixed(1)} / 5`} caption={d.averageRating==null?'No ratings yet':'From your guests'} icon={Star}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>}</QueryState></PortalLayout>;
 }
 function WorkerTransactions() {
   const q=useListWorkerTransactions({query:{queryKey:getListWorkerTransactionsQueryKey()}});
@@ -451,7 +509,7 @@ function WorkerQr() {
 }
 function WorkerSettings() {
   const q=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
-  return <PortalLayout title="Settings"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<><div className="welcome-row"><div><div className="eyebrow">Your SANAD profile</div><h2>Your details, kept simple.</h2><p>Profile information is managed by your company.</p></div></div><section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Email address</span><strong>{q.data.worker.email||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section></>}</QueryState></PortalLayout>;
+  return <PortalLayout title="Settings"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<><div className="welcome-row"><div><div className="eyebrow">Your SANAD profile</div><h2>Your details, kept simple.</h2><p>Profile information is managed by your company.</p></div></div><section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Phone number</span><strong dir="ltr">{q.data.worker.phoneNumber||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section></>}</QueryState></PortalLayout>;
 }
 
 function CompanyOnboarding() {
@@ -476,17 +534,23 @@ function CompanyQrBadges() {
   return <PortalLayout company title="QR Badges"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{badgeWorkers.length?<section className="surface company-badge-list" aria-label="Worker QR badges"><div className="section-heading company-badge-heading"><h3>Worker badges <span className="subtle-count">{badgeWorkers.length}</span></h3><DemoFlag demo={badgeWorkers.some(worker=>worker.isDemo)}/></div>{badgeWorkers.map(worker=>{const url=tipUrl(worker.slug);return <article className="company-badge-row" key={worker.id} data-testid={`card-worker-qr-${worker.id}`}><QRCodeSVG value={url} size={72} level="M" includeMargin fgColor="#3B1720" bgColor="#FAF4EC" title={`SANAD tip QR for ${worker.name}`}/><div className="company-badge-person"><strong>{worker.name}</strong><span>{worker.role}{worker.branch?` · ${worker.branch}`:''}</span><code dir="ltr">{url}</code></div><div className="company-badge-actions"><button className="outline-button compact" type="button" onClick={()=>void copy(worker.id,url)} data-testid={`button-copy-worker-tip-${worker.id}`}>{copied===worker.id?<Check size={13}/>:<Copy size={13}/>} {copied===worker.id?(language==='ar'?'تم النسخ':'Copied'):(language==='ar'?'نسخ الرابط':'Copy link')}</button><a className="outline-button compact" href={url} target="_blank" rel="noreferrer" data-testid={`link-open-worker-tip-${worker.id}`}>{language==='ar'?'فتح الرابط':'Open tip page'} <ArrowUpRight size={13}/></a></div></article>})}</section>:<EmptyPanel title="No active worker badges" text="Activate a worker to show their QR code."/>}</QueryState></PortalLayout>;
 }
 function CompanyWorkers() {
+  const { language }=useLanguage();
   const q=useListCompanyWorkers({query:{queryKey:getListCompanyWorkersQueryKey()}});
   const create=useCreateCompanyWorker();
   const update=useUpdateCompanyWorker();
+  const resetPassword=useIssueWorkerTemporaryPassword();
   const qc=useQueryClient();
   const [open,setOpen]=useState(false);
-  const [name,setName]=useState('');const [arabic,setArabic]=useState('');const [email,setEmail]=useState('');const [role,setRole]=useState('');const [branch,setBranch]=useState('');
+  const [name,setName]=useState('');const [arabic,setArabic]=useState('');const [phoneNumber,setPhoneNumber]=useState('');const [role,setRole]=useState('');const [branch,setBranch]=useState('');
+  const [credentialWorker,setCredentialWorker]=useState('');const [temporaryPassword,setTemporaryPassword]=useState('');const [passwordCopied,setPasswordCopied]=useState(false);
   const [filter,setFilter]=useState('');
   const refresh=()=>qc.invalidateQueries({queryKey:getListCompanyWorkersQueryKey()});
-  const submit=(e:FormEvent)=>{e.preventDefault();create.mutate({data:{name,arabicName:arabic||null,email:email||null,role,branch:branch||null}},{onSuccess:()=>{void refresh();setOpen(false);setName('');setEmail('');setRole('')}})};
-  const visible=(q.data||[]).filter(w=>`${w.name} ${w.role} ${w.branch||''}`.toLowerCase().includes(filter.toLowerCase()));
-  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}><section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{visible.length}</span></h3></div><div className="section-tools"><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>setOpen(true)}><Users size={15}/> Add worker</button></div></div>{visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><Avatar name={w.name} size="sm"/><span><b>{w.name}</b><small>{w.email||'No email added'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><form className="modal-card" onSubmit={submit}><button type="button" className="modal-close" onClick={()=>setOpen(false)} aria-label="Close"><X size={17}/></button><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice">Couldn’t add this worker. Check the details.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form></div>}</PortalLayout>;
+  const closeModal=()=>{setOpen(false);setTemporaryPassword('');setCredentialWorker('');setPasswordCopied(false);setPhoneNumber('')};
+  const submit=(e:FormEvent)=>{e.preventDefault();create.mutate({data:{name,arabicName:arabic||null,phoneNumber,role,branch:branch||null}},{onSuccess:(result)=>{void refresh();setCredentialWorker(result.worker.name);setTemporaryPassword(result.temporaryPassword);setName('');setArabic('');setPhoneNumber('');setRole('');setBranch('')}})};
+  const reset=(worker:{id:string;name:string})=>{const prompt=language==='ar'?`إصدار كلمة مرور مؤقتة جديدة لـ ${worker.name}؟ سيؤدي ذلك إلى إنهاء الجلسات الحالية.`:`Issue a new temporary password for ${worker.name}? This will end their current sessions.`;if(!window.confirm(prompt))return;resetPassword.mutate({workerId:worker.id},{onSuccess:(result)=>{setCredentialWorker(worker.name);setTemporaryPassword(result.temporaryPassword);setOpen(true)}})};
+  const copyPassword=async()=>{try{await navigator.clipboard.writeText(temporaryPassword);setPasswordCopied(true);window.setTimeout(()=>setPasswordCopied(false),1800)}catch{setPasswordCopied(false)}};
+  const visible=(q.data||[]).filter(w=>`${w.name} ${w.phoneNumber||''} ${w.role} ${w.branch||''}`.toLowerCase().includes(filter.toLowerCase()));
+  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{resetPassword.isError&&<div className="form-notice" role="alert">Couldn’t issue a new temporary password. Try again.</div>}<section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{visible.length}</span></h3></div><div className="section-tools"><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>{setTemporaryPassword('');setCredentialWorker('');setOpen(true)}}><Users size={15}/> Add worker</button></div></div>{visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><Avatar name={w.name} size="sm"/><span><b>{w.name}</b><small dir="ltr">{w.phoneNumber||'No phone number'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><div className="worker-row-actions">{w.status==='active'&&<button className="outline-button compact" disabled={resetPassword.isPending} onClick={()=>reset({id:w.id,name:w.name})}>Reset password</button>}<button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></div></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><div className="modal-card"><button type="button" className="modal-close" onClick={closeModal} aria-label="Close"><X size={17}/></button>{temporaryPassword?<><div className="eyebrow">WORKER LOGIN</div><h2>{language==='ar'?`بيانات دخول ${credentialWorker}`:`Share with ${credentialWorker}`}</h2><p>Give this temporary password to the worker directly. It is shown only once.</p><div className="temporary-password" dir="ltr"><code>{temporaryPassword}</code><button type="button" className="outline-button compact" onClick={()=>void copyPassword()}>{passwordCopied?<Check size={14}/>:<Copy size={14}/>} {passwordCopied?'Copied':'Copy'}</button></div><div className="notice-box"><KeyRound size={16}/><span>The worker signs in with their phone number and changes this password at first sign-in.</span></div><PillButton type="button" onClick={closeModal}>Done <Check size={15}/></PillButton></>:<form onSubmit={submit}><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Phone number<input required type="tel" autoComplete="tel" dir="ltr" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice" role="alert">Couldn’t add this worker. Check the phone number and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form>}</div></div>}</PortalLayout>;
 }
 function CompanyTransactions() {
   const q=useListCompanyTransactions({query:{queryKey:getListCompanyTransactionsQueryKey()}});
@@ -523,7 +587,59 @@ function CompanySettings() {
   return <PortalLayout company title={notConfigured?'Set up your company':'Settings'}><QueryState loading={q.isLoading} error={q.isError&&!notConfigured} retry={()=>void q.refetch()}>{notConfigured?<CompanyOnboarding/>:q.data&&<form className="surface settings-form" onSubmit={submit}><div className="panel-kicker">COMPANY PROFILE</div><h3>Company details</h3><label>Company name<input required minLength={2} maxLength={160} value={name} onChange={e=>setName(e.target.value)}/></label><label>Commercial registration number<input maxLength={100} value={registration} onChange={e=>setRegistration(e.target.value)} placeholder="Optional"/></label><label>Contact email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="team@company.com"/></label><div className="notice-box"><ShieldCheck size={17}/><span>Your team’s records are private to your company account.</span></div>{create.isError&&<div className="form-notice">Couldn’t save the profile. Try again.</div>}{saved&&<div className="success-notice"><Check size={15}/> Saved.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Saving…':'Save changes'} <ArrowUpRight size={15}/></PillButton><DemoFlag demo={q.data.isDemo}/></form>}</QueryState></PortalLayout>;
 }
 function AuthPage({ signup=false }: { signup?:boolean }) {
-  return <LocalizedTree><main className="auth-page"><div className="auth-brand"><Brand/><LanguageToggle/></div><div className="auth-copy"><div className="eyebrow">A better way to say thank you</div><h1>Good service<br/><em>deserves a SANAD.</em></h1><p>Simple, thoughtful, and here when you need it.</p></div><div className="auth-clerk">{signup?<SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} forceRedirectUrl={`${basePath}/continue`}/>:<SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/continue`}/>}</div><div className="auth-footer"><Brand/><span>Made with care in Kuwait.</span></div></main></LocalizedTree>;
+  return <LocalizedTree><main className="auth-page"><div className="auth-brand"><Brand/><LanguageToggle/></div><div className="auth-copy"><div className="eyebrow">A better way to say thank you</div><h1>Good service<br/><em>deserves a SANAD.</em></h1><p>Simple, thoughtful, and here when you need it.</p></div><div className="auth-clerk">{signup?<SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} forceRedirectUrl={`${basePath}/continue`}/>:<SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/continue`}/>}</div>{!signup&&<Link className="auth-worker-link" href="/worker/sign-in">Worker? Sign in with phone and password</Link>}<div className="auth-footer"><Brand/><span>Made with care in Kuwait.</span></div></main></LocalizedTree>;
+}
+function WorkerSignInPage() {
+  const { language } = useLanguage();
+  const { isLoaded, isSignedIn } = useAuth();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const session = useGetWorkerAuthSession({ query: { queryKey: getGetWorkerAuthSessionQueryKey(), retry: false, enabled: isLoaded && !isSignedIn } });
+  const login = useWorkerLogin();
+  const changePassword = useChangeWorkerPassword();
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formError, setFormError] = useState('');
+  const needsPasswordChange = session.data?.passwordChangeRequired === true;
+  useEffect(() => {
+    if (isLoaded && isSignedIn) setLocation('/continue');
+    else if (session.data?.authenticated && !session.data.passwordChangeRequired) setLocation('/worker');
+  }, [isLoaded, isSignedIn, session.data, setLocation]);
+  const signIn = (event: FormEvent) => {
+    event.preventDefault();
+    setFormError('');
+    login.mutate({ data: { phoneNumber, password } }, {
+      onSuccess: (result) => {
+        void queryClient.invalidateQueries({ queryKey: getGetWorkerAuthSessionQueryKey() });
+        if (!result.passwordChangeRequired) setLocation('/worker');
+      },
+    });
+  };
+  const submitPasswordChange = (event: FormEvent) => {
+    event.preventDefault();
+    setFormError('');
+    if (newPassword !== confirmPassword) {
+      setFormError(language === 'ar' ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.');
+      return;
+    }
+    changePassword.mutate({ data: { newPassword } }, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetWorkerAuthSessionQueryKey() });
+        setLocation('/worker');
+      },
+    });
+  };
+  if (!isLoaded || (!isSignedIn && session.isLoading)) return <main className="worker-auth-page"><Skeleton rows={3}/></main>;
+  if (isSignedIn) return <Redirect to="/continue"/>;
+  if (session.data?.authenticated && !needsPasswordChange) return <Redirect to="/worker"/>;
+  const ar = language === 'ar';
+  return <LocalizedTree><main className="worker-auth-page"><div className="auth-brand"><Brand/><LanguageToggle/></div><section className="worker-auth-card"><div className="worker-auth-icon">{needsPasswordChange?<KeyRound size={19}/>:<Phone size={19}/>}</div><span className="eyebrow">{ar?'حساب الموظف':'WORKER ACCOUNT'}</span><h1>{needsPasswordChange?(ar?'أنشئ كلمة مرور جديدة':'Create a new password'):(ar?'دخول الموظفين':'Worker sign in')}</h1><p>{needsPasswordChange?(ar?'غيّر كلمة المرور المؤقتة للمتابعة.':'Change your temporary password to continue.'):(ar?'أدخل رقم هاتفك وكلمة مرورك.':'Sign in with your phone number and password.')}</p>{needsPasswordChange&&session.data?.workerName&&<div className="worker-auth-name">{session.data.workerName}</div>}
+    {needsPasswordChange?<form onSubmit={submitPasswordChange} className="worker-auth-form"><label>{ar?'كلمة المرور الجديدة':'New password'}<input required type="password" minLength={12} autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/></label><label>{ar?'تأكيد كلمة المرور':'Confirm password'}<input required type="password" minLength={12} autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label><small>{ar?'12 حرفاً على الأقل.':'Use at least 12 characters.'}</small>{(formError||changePassword.isError)&&<div className="form-notice" role="alert">{formError||(ar?'تعذر تحديث كلمة المرور. حاول مجدداً.':'Could not update your password. Try again.')}</div>}<button className="solid-button worker-auth-submit" type="submit" disabled={changePassword.isPending}>{changePassword.isPending?(ar?'جارٍ الحفظ…':'Saving…'):(ar?'حفظ كلمة المرور':'Save password')} <ArrowUpRight size={15}/></button></form>
+    :<form onSubmit={signIn} className="worker-auth-form"><label>{ar?'رقم الهاتف':'Phone number'}<input required type="tel" autoComplete="tel" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000" dir="ltr"/></label><label>{ar?'كلمة المرور':'Password'}<input required type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></label>{(formError||login.isError)&&<div className="form-notice" role="alert">{formError||(ar?'رقم الهاتف أو كلمة المرور غير صحيحة.':'Phone number or password is incorrect.')}</div>}<button className="solid-button worker-auth-submit" type="submit" disabled={login.isPending}>{login.isPending?(ar?'جارٍ الدخول…':'Signing in…'):(ar?'دخول':'Sign in')} <LogIn size={15}/></button></form>}
+    <div className="worker-auth-links"><Link href="/sign-in">{ar?'دخول البريد أو الشركات':'Email or company sign in'}</Link><Link href="/">{ar?'العودة إلى سند':'Back to SANAD'}</Link></div>
+  </section><footer className="worker-auth-footer"><Brand/><span>Made with care in Kuwait.</span></footer></main></LocalizedTree>;
 }
 function SignedInHome() {
   const worker = useGetWorkerDashboard({ query: { queryKey: getGetWorkerDashboardQueryKey(), retry: false } });
@@ -533,22 +649,31 @@ function SignedInHome() {
 function Protected({ children }: { children: ReactNode }) {
   return <><Show when="signed-in">{children}</Show><Show when="signed-out"><Redirect to="/sign-in"/></Show></>;
 }
+function WorkerProtected({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const session = useGetWorkerAuthSession({ query: { queryKey: getGetWorkerAuthSessionQueryKey(), retry: false, enabled: isLoaded && !isSignedIn } });
+  if (!isLoaded || (!isSignedIn && session.isLoading)) return <main className="home-routing"><Skeleton rows={4}/></main>;
+  if (isSignedIn) return <Protected>{children}</Protected>;
+  if (session.data?.authenticated && !session.data.passwordChangeRequired) return <>{children}</>;
+  return <Redirect to="/worker/sign-in"/>;
+}
 function AuthRoutes() {
   const [,setLocation]=useLocation();
   return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={appearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={{signIn:{start:{title:'Welcome back',subtitle:'Sign in to your SANAD account'}},signUp:{start:{title:'Join SANAD',subtitle:'Bring a little more appreciation to your team'}}}} routerPush={(to)=>setLocation(stripBase(to))} routerReplace={(to)=>setLocation(stripBase(to),{replace:true})}>
     <Switch>
       <Route path="/" component={Landing}/>
       <Route path="/continue" component={()=> <Protected><SignedInHome/></Protected>}/>
+      <Route path="/worker/sign-in" component={WorkerSignInPage}/>
       <Route path="/sign-in/*?" component={()=> <AuthPage/>}/>
       <Route path="/sign-up/*?" component={()=> <AuthPage signup/>}/>
       <Route path="/tip/:slug" component={TipPage}/>
       <Route path="/tip-confirmation" component={ConfirmationPage}/>
-      <Route path="/worker" component={()=> <Protected><WorkerOverview/></Protected>}/>
-      <Route path="/worker/transactions" component={()=> <Protected><WorkerTransactions/></Protected>}/>
-      <Route path="/worker/earnings" component={()=> <Protected><WorkerEarnings/></Protected>}/>
-      <Route path="/worker/payouts" component={()=> <Protected><WorkerPayouts/></Protected>}/>
-      <Route path="/worker/qr" component={()=> <Protected><WorkerQr/></Protected>}/>
-      <Route path="/worker/settings" component={()=> <Protected><WorkerSettings/></Protected>}/>
+      <Route path="/worker" component={()=> <WorkerProtected><WorkerOverview/></WorkerProtected>}/>
+      <Route path="/worker/transactions" component={()=> <WorkerProtected><WorkerTransactions/></WorkerProtected>}/>
+      <Route path="/worker/earnings" component={()=> <WorkerProtected><WorkerEarnings/></WorkerProtected>}/>
+      <Route path="/worker/payouts" component={()=> <WorkerProtected><WorkerPayouts/></WorkerProtected>}/>
+      <Route path="/worker/qr" component={()=> <WorkerProtected><WorkerQr/></WorkerProtected>}/>
+      <Route path="/worker/settings" component={()=> <WorkerProtected><WorkerSettings/></WorkerProtected>}/>
       <Route path="/company" component={()=> <Protected><CompanyOverview/></Protected>}/>
       <Route path="/company/workers" component={()=> <Protected><CompanyWorkers/></Protected>}/>
       <Route path="/company/qr-badges" component={()=> <Protected><CompanyQrBadges/></Protected>}/>

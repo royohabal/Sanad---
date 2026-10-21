@@ -30,14 +30,20 @@ import type {
   PayoutRecord,
   PayoutStatusInput,
   PublicWorker,
+  TemporaryPasswordResponse,
   TipCheckoutInput,
   TipCheckoutResponse,
   TipPaymentStatus,
   TipTransaction,
   Worker,
+  WorkerAuthStatus,
   WorkerBadge,
+  WorkerCreated,
   WorkerDashboard,
   WorkerInput,
+  WorkerLoginInput,
+  WorkerPasswordInput,
+  WorkerSignoutResult,
   WorkerUpdate
 } from './api.schemas';
 
@@ -387,6 +393,333 @@ export function useGetTipStatus<TData = Awaited<ReturnType<typeof getTipStatus>>
 
 
 
+
+export const getWorkerLoginUrl = () => {
+
+
+
+
+  return `/api/worker/auth/login`
+}
+
+/**
+ * @summary Sign in a worker with a phone number and password
+ */
+export const workerLogin = async (workerLoginInput: WorkerLoginInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkerAuthStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkerAuthStatus>(getWorkerLoginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(workerLoginInput)
+  }
+);}
+
+
+
+
+
+export const getWorkerLoginMutationKey = () => ['workerLogin'] as const;
+
+export const getWorkerLoginMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof workerLogin>>, TError,WorkerLoginMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof workerLogin>>, TError,WorkerLoginMutationVariables, TContext> => {
+
+const mutationKey = getWorkerLoginMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof workerLogin>>, WorkerLoginMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  workerLogin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WorkerLoginMutationResult = NonNullable<Awaited<ReturnType<typeof workerLogin>>>
+    export type WorkerLoginMutationBody = BodyType<WorkerLoginInput>
+    export type WorkerLoginMutationError = ErrorType<void>
+    export type WorkerLoginMutationVariables = {data: BodyType<WorkerLoginInput>}
+
+    /**
+ * @summary Sign in a worker with a phone number and password
+ */
+export const useWorkerLogin = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof workerLogin>>, TError,WorkerLoginMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof workerLogin>>,
+        TError,
+        WorkerLoginMutationVariables,
+        TContext
+      > => {
+      return useMutation(getWorkerLoginMutationOptions(options));
+    }
+
+export const getGetWorkerAuthSessionUrl = () => {
+
+
+
+
+  return `/api/worker/auth/session`
+}
+
+/**
+ * @summary Check the current worker session
+ */
+export const getWorkerAuthSession = async ( options?: Parameters<typeof customFetch>[1]): Promise<WorkerAuthStatus> => {
+
+  return customFetch<WorkerAuthStatus>(getGetWorkerAuthSessionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkerAuthSessionQueryKey = () => {
+    return [
+    `/api/worker/auth/session`
+    ] as const;
+    }
+
+
+export const getGetWorkerAuthSessionQueryOptions = <TData = Awaited<ReturnType<typeof getWorkerAuthSession>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkerAuthSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkerAuthSessionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkerAuthSession>>> = ({ signal }) => getWorkerAuthSession({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkerAuthSession>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkerAuthSessionQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkerAuthSession>>>
+export type GetWorkerAuthSessionQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check the current worker session
+ */
+
+export function useGetWorkerAuthSession<TData = Awaited<ReturnType<typeof getWorkerAuthSession>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkerAuthSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkerAuthSessionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getChangeWorkerPasswordUrl = () => {
+
+
+
+
+  return `/api/worker/auth/password`
+}
+
+/**
+ * @summary Set a worker password after first sign-in
+ */
+export const changeWorkerPassword = async (workerPasswordInput: WorkerPasswordInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkerAuthStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkerAuthStatus>(getChangeWorkerPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(workerPasswordInput)
+  }
+);}
+
+
+
+
+
+export const getChangeWorkerPasswordMutationKey = () => ['changeWorkerPassword'] as const;
+
+export const getChangeWorkerPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeWorkerPassword>>, TError,ChangeWorkerPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeWorkerPassword>>, TError,ChangeWorkerPasswordMutationVariables, TContext> => {
+
+const mutationKey = getChangeWorkerPasswordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeWorkerPassword>>, ChangeWorkerPasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  changeWorkerPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeWorkerPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof changeWorkerPassword>>>
+    export type ChangeWorkerPasswordMutationBody = BodyType<WorkerPasswordInput>
+    export type ChangeWorkerPasswordMutationError = ErrorType<void>
+    export type ChangeWorkerPasswordMutationVariables = {data: BodyType<WorkerPasswordInput>}
+
+    /**
+ * @summary Set a worker password after first sign-in
+ */
+export const useChangeWorkerPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeWorkerPassword>>, TError,ChangeWorkerPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeWorkerPassword>>,
+        TError,
+        ChangeWorkerPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getChangeWorkerPasswordMutationOptions(options));
+    }
+
+export const getWorkerLogoutUrl = () => {
+
+
+
+
+  return `/api/worker/auth/logout`
+}
+
+/**
+ * @summary End the current worker session
+ */
+export const workerLogout = async ( options?: Parameters<typeof customFetch>[1]): Promise<WorkerSignoutResult> => {
+
+  return customFetch<WorkerSignoutResult>(getWorkerLogoutUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getWorkerLogoutMutationKey = () => ['workerLogout'] as const;
+
+export const getWorkerLogoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof workerLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof workerLogout>>, TError,void, TContext> => {
+
+const mutationKey = getWorkerLogoutMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof workerLogout>>, void> = () => {
+
+
+          return  workerLogout(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WorkerLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof workerLogout>>>
+
+    export type WorkerLogoutMutationError = ErrorType<unknown>
+
+
+    /**
+ * @summary End the current worker session
+ */
+export const useWorkerLogout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof workerLogout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof workerLogout>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getWorkerLogoutMutationOptions(options));
+    }
 
 export const getGetWorkerDashboardUrl = () => {
 
@@ -949,7 +1282,7 @@ export const getCreateCompanyWorkerUrl = () => {
 /**
  * @summary Add a worker to the signed-in company
  */
-export const createCompanyWorker = async (workerInput: WorkerInput, options?: Parameters<typeof customFetch>[1]): Promise<Worker> => {
+export const createCompanyWorker = async (workerInput: WorkerInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkerCreated> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -965,7 +1298,7 @@ export const createCompanyWorker = async (workerInput: WorkerInput, options?: Pa
     }
     return headers;
   };
-return customFetch<Worker>(getCreateCompanyWorkerUrl(),
+return customFetch<WorkerCreated>(getCreateCompanyWorkerUrl(),
   {
     ...options,
     method: 'POST',
@@ -1024,6 +1357,80 @@ export const useCreateCompanyWorker = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateCompanyWorkerMutationOptions(options));
+    }
+
+export const getIssueWorkerTemporaryPasswordUrl = (workerId: string,) => {
+
+
+
+
+  return `/api/company/workers/${workerId}/temporary-password`
+}
+
+/**
+ * @summary Issue a new one-time worker password
+ */
+export const issueWorkerTemporaryPassword = async (workerId: string, options?: Parameters<typeof customFetch>[1]): Promise<TemporaryPasswordResponse> => {
+
+  return customFetch<TemporaryPasswordResponse>(getIssueWorkerTemporaryPasswordUrl(workerId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getIssueWorkerTemporaryPasswordMutationKey = () => ['issueWorkerTemporaryPassword'] as const;
+
+export const getIssueWorkerTemporaryPasswordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>, TError,IssueWorkerTemporaryPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>, TError,IssueWorkerTemporaryPasswordMutationVariables, TContext> => {
+
+const mutationKey = getIssueWorkerTemporaryPasswordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>, IssueWorkerTemporaryPasswordMutationVariables> = (props) => {
+          const {workerId} = props ?? {};
+
+          return  issueWorkerTemporaryPassword(workerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueWorkerTemporaryPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>>
+
+    export type IssueWorkerTemporaryPasswordMutationError = ErrorType<void>
+    export type IssueWorkerTemporaryPasswordMutationVariables = {workerId: string}
+
+    /**
+ * @summary Issue a new one-time worker password
+ */
+export const useIssueWorkerTemporaryPassword = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>, TError,IssueWorkerTemporaryPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof issueWorkerTemporaryPassword>>,
+        TError,
+        IssueWorkerTemporaryPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getIssueWorkerTemporaryPasswordMutationOptions(options));
     }
 
 export const getUpdateCompanyWorkerUrl = (workerId: string,) => {

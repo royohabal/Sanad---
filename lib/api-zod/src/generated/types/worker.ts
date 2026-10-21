@@ -15,6 +15,8 @@ export interface Worker {
   arabicName?: string | null;
   /** @nullable */
   email?: string | null;
+  /** @nullable */
+  phoneNumber: string | null;
   role: string;
   /** @nullable */
   branch: string | null;
