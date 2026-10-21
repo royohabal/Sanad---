@@ -511,7 +511,7 @@ function TipPage() {
         {displayedAmount !== undefined && displayedUsdCents !== undefined && displayedRate && displayedRateSource && displayedRateUpdatedAt && <section className="conversion-review" aria-live="polite">
           <div className="conversion-row"><span>{ar ? 'بقشيش العامل' : 'Worker tip'}</span><strong>{money(displayedAmount)}</strong></div>
           <div className="conversion-row conversion-pay"><span>{ar ? 'المبلغ عند الدفع' : 'Amount at Stripe'}</span><strong>{usdMoney(displayedUsdCents)}</strong></div>
-          <p>1 KWD = {usdMoney(Math.round(Number(displayedRate) * 100))} USD</p>
+          <p>1 KWD = ${Number(displayedRate).toFixed(6)} USD</p>
           <small>{ar ? 'سعر التحويل حسب' : 'Rate by'} <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">{displayedRateSource}</a> · {new Date(displayedRateUpdatedAt).toLocaleDateString(ar ? 'ar-KW' : 'en-KW')}</small>
         </section>}
         <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع تجريبي آمن عبر Stripe · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div>
