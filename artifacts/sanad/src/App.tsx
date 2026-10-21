@@ -267,7 +267,12 @@ function DemoFlag({ demo }: { demo?: boolean }) {
   return demo ? <span className="demo-flag"><Sparkles size={12}/> {language==='ar'?'بيانات تجريبية':'DEMO DATA'}</span> : null;
 }
 function Avatar({ name, photo, size = 'md' }: { name: string; photo?: string | null; size?: 'sm' | 'md' | 'lg' }) {
-  return photo ? <img className={`avatar avatar-${size}`} src={photo} alt={name}/> : <span className={`avatar avatar-${size}`} aria-label={name}>{initials(name)}</span>;
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const className = `avatar avatar-${size}`;
+  if (photo && failedPhoto !== photo) {
+    return <img className={className} src={photo} alt={name} onError={() => setFailedPhoto(photo)}/>;
+  }
+  return <span className={className} aria-label={name}>{initials(name)}</span>;
 }
 function PillButton({ children, onClick, className = '', type = 'button', disabled }: { children: ReactNode; onClick?: () => void; className?: string; type?: 'button' | 'submit'; disabled?: boolean }) {
   return <button type={type} disabled={disabled} onClick={onClick} className={`pill-button ${className}`}>{children}</button>;
