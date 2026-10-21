@@ -198,8 +198,6 @@ html[dir="rtl"] .side-profile>svg { transform:rotate(180deg); }.portal-sidebar {
 .landing-tip-band .eyebrow { color:#EF9B80; }
 .landing-tip-band h2 { margin:8px 0 4px; font-size:19px; letter-spacing:-.04em; }
 .landing-tip-band p { margin:0; color:#DFC8B8; font-size:10px; }
-.landing-trust { display:flex; align-items:center; gap:9px; color:#EED9C3; font-size:10px; white-space:nowrap; }
-.landing-trust svg { color:#EF805F; }
 .landing-business { padding-top:83px; padding-bottom:86px; }
 .business-panel-simple { min-height:250px; padding:26px; }
 .business-panel-simple .business-stat { margin-top:43px; }
@@ -234,7 +232,6 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
   .landing-handshake { width:124px; height:124px; }
   .landing-tip-band { align-items:flex-start; flex-direction:column; gap:17px; padding:25px 23px; }
   .landing-tip-band h2 { font-size:17px; }
-  .landing-trust { white-space:normal; }
   .landing-business { padding:63px 23px; }
   .business-panel-simple { min-height:235px; }
 }

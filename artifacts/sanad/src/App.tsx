@@ -96,7 +96,7 @@ const arabicCopy: Record<string, string> = {
   'For every team member':'لكل فرد في الفريق','Clear records':'سجلات واضحة','Create a company account':'إنشاء حساب شركة',
   'Scan a worker’s QR badge to begin.':'امسح رمز الموظف للبدء.',
   'Choose an amount, add an optional rating, then check out securely.':'اختر المبلغ، وأضف تقييماً اختيارياً، ثم ادفع بأمان.',
-  'Secure checkout · No account needed':'دفع آمن · لا حاجة إلى حساب','No sign-up. No extra steps.':'لا تسجيل ولا خطوات إضافية.',
+  'Secure checkout · No account needed':'دفع آمن · لا حاجة إلى حساب',
   'Guest tipping links':'روابط إكراميات الضيوف','Worker QR badges.':'رموز QR للموظفين.',
   'Each badge opens that worker’s existing SANAD tip page.':'يفتح كل رمز صفحة الإكرامية الخاصة بالموظف.',
   'Copy link':'نسخ الرابط','Open tip page':'فتح صفحة الإكرامية','Copied':'تم النسخ',
@@ -356,7 +356,7 @@ function Landing() {
         <article className="how-step"><span className="how-icon"><ShieldCheck size={21}/></span><small>03</small><h3>{ar ? 'ادفع بأمان' : 'Check out securely'}</h3><p>{ar ? 'أكمل الدفع الآمن دون إنشاء حساب.' : 'Complete secure checkout. No account needed.'}</p></article>
       </div>
     </section>
-    <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.'}</p></div><div className="landing-trust"><ShieldCheck size={19}/><span>{ar ? 'لا تسجيل. لا خطوات إضافية.' : 'No sign-up. No extra steps.'}</span></div>
+    <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.'}</p></div>
       <div className="tip-demo" aria-live="polite">
         <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span><strong>{ar ? 'جرّب إرسال الشكر' : 'Try a little thank you'}</strong></div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
         {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
