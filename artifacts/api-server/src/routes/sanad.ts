@@ -767,6 +767,9 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
     const liveModeBlocked =
       error instanceof StripePaymentError &&
       error.code === "live_mode_forbidden";
+    const testCredentialsMissing =
+      error instanceof StripePaymentError &&
+      error.code === "test_credentials_missing";
     await updateTip(
       tip.id,
       { status: "failed", isDemo: worker.isDemo },
@@ -782,9 +785,11 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
       },
       "Could not create SANAD Stripe checkout",
     );
-    res.status(liveModeBlocked ? 503 : 502).json({
+    res.status(liveModeBlocked || testCredentialsMissing ? 503 : 502).json({
       error: liveModeBlocked
         ? "SANAD accepts test payments only. No payment was made."
+        : testCredentialsMissing
+          ? "Stripe test payment setup is incomplete. No payment was made."
         : "Stripe checkout is unavailable. No payment was made.",
     });
   }

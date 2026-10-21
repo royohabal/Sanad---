@@ -1,6 +1,4 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
-
-const connectors = new ReplitConnectors();
+const STRIPE_API_BASE_URL = "https://api.stripe.com";
 
 type StripeApiErrorBody = {
   error?: {
@@ -32,12 +30,31 @@ export class StripePaymentError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly code?: "live_charges_disabled" | "unsupported_currency" | "live_mode_forbidden",
+    readonly code?: "live_charges_disabled" | "unsupported_currency" | "live_mode_forbidden" | "test_credentials_missing",
     readonly stripeError?: { type?: string; code?: string; param?: string },
   ) {
     super(message);
     this.name = "StripePaymentError";
   }
+}
+
+export function requireStripeTestSecretKey(secretKey: string | undefined): string {
+  const normalizedKey = secretKey?.trim();
+  if (!normalizedKey) {
+    throw new StripePaymentError(
+      "Stripe test-mode credentials are not configured",
+      503,
+      "test_credentials_missing",
+    );
+  }
+  if (!normalizedKey.startsWith("sk_test_")) {
+    throw new StripePaymentError(
+      "SANAD requires a Stripe test-mode secret key",
+      409,
+      "live_mode_forbidden",
+    );
+  }
+  return normalizedKey;
 }
 
 async function verifyStripeAccountCanAcceptTips(): Promise<boolean> {
@@ -60,7 +77,10 @@ async function stripeRequest<T>(
     idempotencyKey?: string;
   } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = {};
+  const secretKey = requireStripeTestSecretKey(process.env.STRIPE_SECRET_KEY);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${secretKey}`,
+  };
   if (options.form) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
   }
@@ -68,10 +88,10 @@ async function stripeRequest<T>(
     headers["Idempotency-Key"] = options.idempotencyKey;
   }
 
-  const response = await connectors.proxy("stripe", path, {
+  const response = await fetch(new URL(path, STRIPE_API_BASE_URL), {
     method: options.method ?? "GET",
     headers,
-    body: options.form,
+    body: options.form?.toString(),
   });
 
   let payload: unknown;
