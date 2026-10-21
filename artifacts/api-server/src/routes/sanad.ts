@@ -261,9 +261,9 @@ async function seedDemoCompany(companyId: string, actorId: string) {
   if ((await getWorkersByCompany(companyId)).length) return;
 
   const demoWorkers = [
-    { name: "Ahmed Al-Mutairi", arabicName: "أحمد المطيري", role: "Service host", branch: "Salmiya" },
-    { name: "Noor Al-Sabah", arabicName: "نور الصباح", role: "Barista", branch: "Sharq" },
-    { name: "Sami Rahman", arabicName: "سامي رحمن", role: "Guest services", branch: "Salmiya" },
+    { name: "Worker No. 1", arabicName: "الموظف رقم ١", role: "Service host", branch: "Salmiya" },
+    { name: "Worker No. 2", arabicName: "الموظف رقم ٢", role: "Barista", branch: "Sharq" },
+    { name: "Worker No. 3", arabicName: "الموظف رقم ٣", role: "Guest services", branch: "Salmiya" },
   ];
   const workers = await Promise.all(
     demoWorkers.map((item) =>
@@ -364,8 +364,8 @@ async function ensureLandingDemoWorker() {
       clerkUserId: null,
       clerkInvitationId: null,
       slug,
-      name: "Ahmed Al-Mutairi",
-      arabicName: "أحمد المطيري",
+      name: "Worker No. 1",
+      arabicName: "الموظف رقم ١",
       email: null,
       phoneNumber: null,
       workerPasswordHash: null,

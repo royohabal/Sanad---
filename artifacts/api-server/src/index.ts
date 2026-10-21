@@ -1,6 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { initializeMongoStore } from "./lib/mongoStore";
+import {
+  initializeMongoStore,
+  normalizeDemoWorkerNames,
+} from "./lib/mongoStore";
 
 const rawPort = process.env["PORT"];
 
@@ -19,10 +22,17 @@ if (Number.isNaN(port) || port <= 0) {
 async function startServer(): Promise<void> {
   try {
     const { databaseName, collectionNames } = await initializeMongoStore();
+    const renamedDemoWorkers = await normalizeDemoWorkerNames();
     logger.info(
       { databaseName, collectionNames },
       "MongoDB SANAD data store initialized",
     );
+    if (renamedDemoWorkers > 0) {
+      logger.info(
+        { renamedDemoWorkers },
+        "Updated development demo worker names",
+      );
+    }
   } catch (error) {
     logger.fatal(
       { errorType: error instanceof Error ? error.name : "UnknownError" },

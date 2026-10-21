@@ -136,6 +136,47 @@ export async function initializeMongoStore(): Promise<{
   };
 }
 
+export async function normalizeDemoWorkerNames(): Promise<number> {
+  if (process.env.NODE_ENV === "production") return 0;
+
+  const workersCollection = await collection("workers");
+  const demoWorkers = await workersCollection
+    .find({ isDemo: true })
+    .project<{
+      id: string;
+      companyId: string;
+      createdAt: Date;
+      name: string;
+      arabicName?: string | null;
+    }>({ id: 1, companyId: 1, createdAt: 1, name: 1, arabicName: 1 })
+    .sort({ companyId: 1, createdAt: 1, id: 1 })
+    .toArray();
+  const ordinalsByCompany = new Map<string, number>();
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+  let renamed = 0;
+
+  for (const worker of demoWorkers) {
+    const ordinal = (ordinalsByCompany.get(worker.companyId) ?? 0) + 1;
+    ordinalsByCompany.set(worker.companyId, ordinal);
+    const arabicOrdinal = String(ordinal).replace(
+      /\d/g,
+      (digit) => arabicDigits[Number(digit)] ?? digit,
+    );
+    const name = `Worker No. ${ordinal}`;
+    const arabicName = `الموظف رقم ${arabicOrdinal}`;
+
+    if (worker.name === name && worker.arabicName === arabicName) continue;
+
+    const result = await workersCollection.updateOne(
+      { id: worker.id, isDemo: true },
+      { $set: { name, arabicName, updatedAt: new Date() } },
+    );
+    renamed += result.modifiedCount;
+  }
+
+  return renamed;
+}
+
 export async function getCompanyById(id: string): Promise<Company | null> {
   const document = await (await collection("companies")).findOne({ id });
   return document ? withoutMongoId<Company>(document) : null;
