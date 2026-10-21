@@ -6,6 +6,7 @@ import type { Worker } from "@workspace/db";
 import {
   createTipCheckoutSession,
   getStripeCheckoutSession,
+  isStripeCheckoutEnabled,
   StripePaymentError,
 } from "../lib/stripePayments";
 import {
@@ -505,6 +506,13 @@ router.post("/tips/quote", async (req, res): Promise<void> => {
 });
 
 router.post("/tips/checkout", async (req, res): Promise<void> => {
+  if (!isStripeCheckoutEnabled()) {
+    res.status(503).json({
+      error: "Tip checkout is disabled in this public demo. No payment was made.",
+    });
+    return;
+  }
+
   const body = CreateTipCheckoutBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
@@ -796,6 +804,13 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
 });
 
 router.get("/tips/:tipId", async (req, res): Promise<void> => {
+  if (!isStripeCheckoutEnabled()) {
+    res.status(503).json({
+      error: "Tip payment status is unavailable in this public demo.",
+    });
+    return;
+  }
+
   const params = GetTipStatusParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

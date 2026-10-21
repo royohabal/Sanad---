@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { isStripeCheckoutEnabled } from "./lib/stripePayments";
 import { handleStripeWebhook, StripeWebhookError } from "./lib/stripeWebhook";
 import {
   CLERK_PROXY_PATH,
@@ -39,6 +40,13 @@ app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   async (req, res): Promise<void> => {
+    if (!isStripeCheckoutEnabled()) {
+      res.status(503).json({
+        error: "Stripe payments are disabled in this public demo.",
+      });
+      return;
+    }
+
     if (!Buffer.isBuffer(req.body)) {
       res.status(400).json({ error: "Invalid webhook body" });
       return;

@@ -38,6 +38,12 @@ export class StripePaymentError extends Error {
   }
 }
 
+export function isStripeCheckoutEnabled(
+  environment: string | undefined = process.env.NODE_ENV,
+): boolean {
+  return environment !== "production";
+}
+
 export function requireStripeTestSecretKey(secretKey: string | undefined): string {
   const normalizedKey = secretKey?.trim();
   if (!normalizedKey) {

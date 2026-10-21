@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isStripeCheckoutEnabled,
   requireStripeTestSecretKey,
   StripePaymentError,
 } from "./stripePayments";
+
+test("keeps Stripe checkout enabled in development", () => {
+  assert.equal(isStripeCheckoutEnabled("development"), true);
+});
+
+test("disables Stripe checkout in production", () => {
+  assert.equal(isStripeCheckoutEnabled("production"), false);
+});
 
 test("accepts only a Stripe test-mode secret key", () => {
   assert.equal(
