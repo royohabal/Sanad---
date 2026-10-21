@@ -33,6 +33,7 @@ export class StripePaymentError extends Error {
     message: string,
     readonly status: number,
     readonly code?: "live_charges_disabled" | "unsupported_currency" | "live_mode_forbidden",
+    readonly stripeError?: { type?: string; code?: string; param?: string },
   ) {
     super(message);
     this.name = "StripePaymentError";
@@ -82,9 +83,10 @@ async function stripeRequest<T>(
 
   if (!response.ok) {
     const errorBody = payload as StripeApiErrorBody | null;
-    const message = errorBody?.error?.message ?? "Stripe request failed";
+    const stripeError = errorBody?.error;
+    const message = stripeError?.message ?? "Stripe request failed";
     const code =
-      errorBody?.error?.param === "currency" &&
+      stripeError?.param === "currency" &&
       message.toLowerCase().includes("invalid currency")
         ? "unsupported_currency"
         : undefined;
@@ -92,6 +94,11 @@ async function stripeRequest<T>(
       message,
       response.status,
       code,
+      {
+        type: stripeError?.type,
+        code: stripeError?.code,
+        param: stripeError?.param,
+      },
     );
   }
 

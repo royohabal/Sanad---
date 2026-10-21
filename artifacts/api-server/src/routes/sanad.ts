@@ -776,6 +776,9 @@ router.post("/tips/checkout", async (req, res): Promise<void> => {
       {
         tipId: tip.id,
         stripeStatus: error instanceof StripePaymentError ? error.status : undefined,
+        stripeErrorCode: error instanceof StripePaymentError ? error.stripeError?.code : undefined,
+        stripeParam: error instanceof StripePaymentError ? error.stripeError?.param : undefined,
+        stripeType: error instanceof StripePaymentError ? error.stripeError?.type : undefined,
       },
       "Could not create SANAD Stripe checkout",
     );
