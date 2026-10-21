@@ -210,6 +210,14 @@ html[dir="rtl"] .side-profile>svg { transform:rotate(180deg); }.portal-sidebar {
 .landing .footer { min-height:78px; }
 html[dir="rtl"] .company-badge-person { text-align:start; }
 @media (max-width:767px) {
+  .portal-main { width:100%;max-width:100%;min-width:0; }
+  .portal-header,.portal-content { width:100%;max-width:100%;min-width:0; }
+  .portal-header>div:nth-child(2) { min-width:0; }
+  .qr-page-grid { width:100%;min-width:0;grid-template-columns:minmax(0,1fr); }
+  .qr-preview,.qr-instructions { width:100%;min-width:0; }
+  .copy-link { width:100%;min-width:0; }
+  .qr-large { max-width:100%; }
+  .qr-large .real-qr { width:min(190px,60vw);height:auto;aspect-ratio:1; }
   .portal-sidebar { width:min(290px,84vw); }
   .side-secondary { margin-top:6px; }
   .portal-content { padding-top:21px; }
