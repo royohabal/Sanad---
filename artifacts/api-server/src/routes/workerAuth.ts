@@ -15,6 +15,7 @@ import {
   getWorkerSession,
   hashWorkerPassword,
   normalizePhoneNumber,
+  revokeOtherWorkerSessions,
   upgradeSetupSession,
   verifyWorkerPassword,
 } from "../lib/workerAuth";
@@ -134,16 +135,35 @@ router.post("/worker/auth/password", async (req, res): Promise<void> => {
     return;
   }
   const auth = await getWorkerSession(req);
-  if (
-    !auth ||
-    auth.session.state !== "password_setup" ||
-    !auth.worker.passwordChangeRequired
-  ) {
-    res.status(401).json({ error: "Sign in with your temporary password first." });
+  if (!auth) {
+    res.status(401).json({ error: "Sign in to change your password." });
     return;
   }
+  const isPasswordSetup =
+    auth.session.state === "password_setup" && auth.worker.passwordChangeRequired;
+  const isActiveSession =
+    auth.session.state === "active" && !auth.worker.passwordChangeRequired;
+  if (!isPasswordSetup && !isActiveSession) {
+    res.status(401).json({ error: "Your worker session is not active." });
+    return;
+  }
+  if (isActiveSession) {
+    if (!parsed.data.currentPassword) {
+      res.status(400).json({ error: "Enter your current password." });
+      return;
+    }
+    if (
+      !(await verifyWorkerPassword(
+        parsed.data.currentPassword,
+        auth.worker.workerPasswordHash,
+      ))
+    ) {
+      res.status(401).json({ error: "Current password is incorrect." });
+      return;
+    }
+  }
   if (await verifyWorkerPassword(parsed.data.newPassword, auth.worker.workerPasswordHash)) {
-    res.status(400).json({ error: "Choose a password different from the temporary password." });
+    res.status(400).json({ error: "Choose a password different from your current password." });
     return;
   }
   const workerPasswordHash = await hashWorkerPassword(parsed.data.newPassword);
@@ -156,7 +176,11 @@ router.post("/worker/auth/password", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Worker account not found." });
     return;
   }
-  await upgradeSetupSession(req, res, worker.id, auth.session.id);
+  if (isPasswordSetup) {
+    await upgradeSetupSession(req, res, worker.id, auth.session.id);
+  } else {
+    await revokeOtherWorkerSessions(worker.id, auth.session.id);
+  }
   res.json(
     GetWorkerAuthSessionResponse.parse({
       authenticated: true,

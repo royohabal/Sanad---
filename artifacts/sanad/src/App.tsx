@@ -143,6 +143,7 @@ const arabicCopy: Record<string, string> = {
   'Copy':'نسخ','Your badge is linked to your worker account. Tips are recorded securely and can be reviewed anytime.':'رمزك مرتبط بحسابك الوظيفي. تُسجل الإكراميات بأمان ويمكنك مراجعتها في أي وقت.',
   'Print my badge':'اطبع رمزي','Your SANAD profile':'ملفك في سند','Your details, kept simple.':'بياناتك، بكل بساطة.',
   'Profile information is managed by your company.':'تدير شركتك معلومات ملفك.','Display name':'الاسم المعروض','Arabic name':'الاسم بالعربية',
+  'SECURITY':'الأمان','Change password':'تغيير كلمة المرور','Current password':'كلمة المرور الحالية','New password':'كلمة المرور الجديدة','Confirm new password':'تأكيد كلمة المرور الجديدة','Use at least 12 characters.':'استخدم 12 حرفاً على الأقل.','Passwords do not match.':'كلمتا المرور غير متطابقتين.','Could not update your password. Check your current password and try again.':'تعذر تحديث كلمة المرور. تحقق من كلمة المرور الحالية وحاول مجدداً.','Password updated.':'تم تحديث كلمة المرور.','Update password':'تحديث كلمة المرور','Updating…':'جارٍ التحديث…',
   'Email address':'البريد الإلكتروني','Team / branch':'الفريق / الفرع',
   'Need to update something? Ask your company manager to change your profile details.':'هل ترغب بتحديث بياناتك؟ اطلب من مدير الشركة تعديل ملفك.',
   'Your team’s appreciation, at a glance':'تقدير فريقك، في لمحة','Good afternoon,':'مساء الخير،',
@@ -514,7 +515,42 @@ function WorkerQr() {
 }
 function WorkerSettings() {
   const q=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
-  return <PortalLayout title="Settings"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<><div className="welcome-row"><div><div className="eyebrow">Your SANAD profile</div><h2>Your details, kept simple.</h2><p>Profile information is managed by your company.</p></div></div><section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Phone number</span><strong dir="ltr">{q.data.worker.phoneNumber||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section></>}</QueryState></PortalLayout>;
+  const {language}=useLanguage();
+  const queryClient=useQueryClient();
+  const changePassword=useChangeWorkerPassword();
+  const [currentPassword,setCurrentPassword]=useState('');
+  const [newPassword,setNewPassword]=useState('');
+  const [confirmPassword,setConfirmPassword]=useState('');
+  const [passwordError,setPasswordError]=useState('');
+  const [passwordSaved,setPasswordSaved]=useState(false);
+  const submitPasswordChange=(event:FormEvent)=>{
+    event.preventDefault();
+    setPasswordError('');
+    setPasswordSaved(false);
+    changePassword.reset();
+    if(newPassword!==confirmPassword){setPasswordError('Passwords do not match.');return}
+    changePassword.mutate({data:{currentPassword,newPassword}},{onSuccess:()=>{
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordSaved(true);
+      void queryClient.invalidateQueries({queryKey:getGetWorkerAuthSessionQueryKey()});
+    }});
+  };
+  return <PortalLayout title="Settings"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<>
+    <div className="welcome-row"><div><div className="eyebrow">Your SANAD profile</div><h2>Your details, kept simple.</h2><p>Profile information is managed by your company.</p></div></div>
+    <section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Phone number</span><strong dir="ltr">{q.data.worker.phoneNumber||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section>
+    <form className="surface settings-form worker-password-form" onSubmit={submitPasswordChange}>
+      <div className="panel-kicker">SECURITY</div><h3>Change password</h3>
+      <label>Current password<input data-testid="input-worker-current-password" required type="password" autoComplete="current-password" value={currentPassword} onChange={event=>{setCurrentPassword(event.target.value);setPasswordSaved(false)}}/></label>
+      <label>New password<input data-testid="input-worker-new-password" required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={newPassword} onChange={event=>{setNewPassword(event.target.value);setPasswordSaved(false)}}/></label>
+      <label>Confirm new password<input data-testid="input-worker-confirm-password" required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={confirmPassword} onChange={event=>{setConfirmPassword(event.target.value);setPasswordSaved(false)}}/></label>
+      <small className="worker-password-hint">Use at least 12 characters.</small>
+      {(passwordError||changePassword.isError)&&<div className="form-notice" role="alert">{passwordError||'Could not update your password. Check your current password and try again.'}</div>}
+      {passwordSaved&&<div className="success-notice"><Check size={15}/> Password updated.</div>}
+      <button className="solid-button worker-password-submit" type="submit" disabled={changePassword.isPending}>{changePassword.isPending?'Updating…':'Update password'} <ArrowUpRight size={15}/></button>
+    </form>
+  </>}</QueryState></PortalLayout>;
 }
 
 function CompanyOnboarding() {

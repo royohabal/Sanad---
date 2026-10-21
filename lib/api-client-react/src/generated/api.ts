@@ -568,7 +568,8 @@ export const getChangeWorkerPasswordUrl = () => {
 }
 
 /**
- * @summary Set a worker password after first sign-in
+ * First sign-in password setup omits currentPassword; an active worker session must provide it.
+ * @summary Change or set a worker password
  */
 export const changeWorkerPassword = async (workerPasswordInput: WorkerPasswordInput, options?: Parameters<typeof customFetch>[1]): Promise<WorkerAuthStatus> => {
 
@@ -634,7 +635,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ChangeWorkerPasswordMutationVariables = {data: BodyType<WorkerPasswordInput>}
 
     /**
- * @summary Set a worker password after first sign-in
+ * @summary Change or set a worker password
  */
 export const useChangeWorkerPassword = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeWorkerPassword>>, TError,ChangeWorkerPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

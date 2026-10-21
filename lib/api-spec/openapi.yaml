@@ -124,7 +124,8 @@ paths:
       operationId: changeWorkerPassword
       tags: [worker]
       security: [{ workerSession: [] }]
-      summary: Set a worker password after first sign-in
+      summary: Change or set a worker password
+      description: First sign-in password setup omits currentPassword; an active worker session must provide it.
       requestBody:
         required: true
         content:
@@ -549,6 +550,7 @@ components:
       type: object
       required: [newPassword]
       properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 128 }
         newPassword: { type: string, minLength: 12, maxLength: 128 }
     WorkerAuthStatus:
       type: object

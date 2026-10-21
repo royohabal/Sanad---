@@ -8,6 +8,11 @@
 
 export interface WorkerPasswordInput {
   /**
+     * @minLength 1
+     * @maxLength 128
+     */
+  currentPassword?: string;
+  /**
      * @minLength 12
      * @maxLength 128
      */

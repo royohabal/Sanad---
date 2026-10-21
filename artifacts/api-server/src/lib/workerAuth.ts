@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { randomBytes, scrypt as scryptCallback, createHash, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import { db, workerAuthSessionsTable, workersTable } from "@workspace/db";
@@ -158,6 +158,20 @@ export async function revokeWorkerSessions(workerId: string): Promise<void> {
   await db
     .delete(workerAuthSessionsTable)
     .where(eq(workerAuthSessionsTable.workerId, workerId));
+}
+
+export async function revokeOtherWorkerSessions(
+  workerId: string,
+  exceptSessionId: string,
+): Promise<void> {
+  await db
+    .delete(workerAuthSessionsTable)
+    .where(
+      and(
+        eq(workerAuthSessionsTable.workerId, workerId),
+        ne(workerAuthSessionsTable.id, exceptSessionId),
+      ),
+    );
 }
 
 export async function issueTemporaryWorkerPassword(workerId: string): Promise<string> {

@@ -113,14 +113,18 @@ export const GetWorkerAuthSessionResponse = zod.object({
 
 
 /**
- * @summary Set a worker password after first sign-in
+ * First sign-in password setup omits currentPassword; an active worker session must provide it.
+ * @summary Change or set a worker password
  */
+export const changeWorkerPasswordBodyCurrentPasswordMax = 128;
+
 export const changeWorkerPasswordBodyNewPasswordMin = 12;
 export const changeWorkerPasswordBodyNewPasswordMax = 128;
 
 
 
 export const ChangeWorkerPasswordBody = zod.object({
+  "currentPassword": zod.string().min(1).max(changeWorkerPasswordBodyCurrentPasswordMax).optional(),
   "newPassword": zod.string().min(changeWorkerPasswordBodyNewPasswordMin).max(changeWorkerPasswordBodyNewPasswordMax)
 })
 
