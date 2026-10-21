@@ -110,6 +110,7 @@ const arabicCopy: Record<string, string> = {
   'Print badge':'طباعة الرمز','Payroll record only · SANAD does not send bank transfers.':'سجل رواتب فقط · لا ترسل سند تحويلات مصرفية.',
   'Payroll records only · SANAD does not send bank transfers.':'سجلات الرواتب فقط · لا ترسل سند تحويلات مصرفية.',
   'No active worker badges':'لا توجد رموز لموظفين نشطين','Activate a worker to show their QR code.':'فعّل موظفاً لإظهار رمز QR الخاص به.',
+  'COMPANY SETUP':'إعداد الشركة',
   'MONTHLY REPORT':'التقرير الشهري','Month':'الشهر',
   'Your tips, month by month.':'إكرامياتك شهراً بعد شهر.','Earnings summary':'ملخص الأرباح',
   'Recorded payroll.':'سجلات الرواتب.','Employer-entered payroll history':'سجل الرواتب الذي أدخله صاحب العمل.',
@@ -379,17 +380,21 @@ function PortalLayout({ children, company = false, title = 'Overview' }: { child
   const { language } = useLanguage();
   const [currentLocation] = useLocation();
   const workerAccount = useGetWorkerDashboard({ query: { enabled: !company, queryKey: getGetWorkerDashboardQueryKey() } });
-  const companyAccount = useGetCompanyDashboard({ query: { enabled: company, queryKey: getGetCompanyDashboardQueryKey() } });
-  const nav = company ? companyNav : workerNav;
+  const companyAccount = useGetCompanyDashboard({ query: { enabled: company, queryKey: getGetCompanyDashboardQueryKey(), retry: false } });
+  const companyProfileMissing = company && companyAccount.isError && isHttp404(companyAccount.error);
+  const nav = company ? (companyProfileMissing ? companyNav.slice(0,1) : companyNav) : workerNav;
   const [mobileNav,setMobileNav] = useState(false);
   const currentPath = basePath && currentLocation.startsWith(basePath) ? currentLocation.slice(basePath.length) || '/' : currentLocation;
   const accountName = company ? companyAccount.data?.company.name || 'Your company' : workerAccount.data?.worker.name || 'Your account';
   const accountRole = company ? 'Company manager' : workerAccount.data?.worker.role || 'Worker';
+  if (companyProfileMissing && currentPath !== '/company') {
+    return <Redirect to="/company"/>;
+  }
   return <LocalizedTree><div className="portal">
     <aside id="portal-navigation" aria-label={company?'Company navigation':'Worker navigation'} className={`portal-sidebar ${mobileNav?'sidebar-open':''}`}><div className="side-brand"><Brand/><button className="mobile-close" onClick={()=>setMobileNav(false)} aria-label="Close menu"><X size={18}/></button></div>
       <div className="side-profile"><Avatar name={accountName} size="md"/><div><strong>{accountName}</strong><span>{accountRole}</span></div></div>
-      <span className="side-section">{company?'MANAGE YOUR TEAM':'YOUR SANAD'}</span><nav className="side-nav">{nav.map((item)=>{const active=currentPath===item.href;const Icon=item.icon;return <Link href={item.href} key={item.href} onClick={()=>setMobileNav(false)} className={`side-link ${active?'active':''}`} aria-current={active?'page':undefined} data-testid={`link-nav-${item.href.split('/').pop()}`}><Icon size={17}/><span>{item.label}</span></Link>})}</nav>
-      <div className="sidebar-bottom"><Link href={company?'/company/settings':'/worker/settings'} onClick={()=>setMobileNav(false)} className={`side-link side-secondary ${currentPath===(company?'/company/settings':'/worker/settings')?'active':''}`} data-testid="link-nav-settings"><Settings size={17}/><span>Settings</span></Link><div className="sidebar-help"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><span>We’re here to help.</span><a href="mailto:hello@sanad.kw">Get in touch <ArrowUpRight size={12}/></a></div><span className="side-version">SANAD · KUWAIT</span></div>
+      <span className="side-section">{companyProfileMissing?'COMPANY SETUP':company?'MANAGE YOUR TEAM':'YOUR SANAD'}</span><nav className="side-nav">{nav.map((item)=>{const active=currentPath===item.href;const Icon=item.icon;return <Link href={item.href} key={item.href} onClick={()=>setMobileNav(false)} className={`side-link ${active?'active':''}`} aria-current={active?'page':undefined} data-testid={`link-nav-${item.href.split('/').pop()}`}><Icon size={17}/><span>{item.label}</span></Link>})}</nav>
+      <div className="sidebar-bottom">{!companyProfileMissing&&<Link href={company?'/company/settings':'/worker/settings'} onClick={()=>setMobileNav(false)} className={`side-link side-secondary ${currentPath===(company?'/company/settings':'/worker/settings')?'active':''}`} data-testid="link-nav-settings"><Settings size={17}/><span>Settings</span></Link>}<div className="sidebar-help"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><span>We’re here to help.</span><a href="mailto:hello@sanad.kw">Get in touch <ArrowUpRight size={12}/></a></div><span className="side-version">SANAD · KUWAIT</span></div>
     </aside>
     {mobileNav && <button aria-label="Close navigation" className="nav-backdrop" onClick={()=>setMobileNav(false)}/>}
     <div className="portal-main"><header className="portal-header"><button className="mobile-menu" onClick={()=>setMobileNav(true)} aria-label="Open menu" aria-expanded={mobileNav} aria-controls="portal-navigation"><Menu/></button><div><span className="breadcrumb">SANAD <ChevronRight size={12}/> {company?'COMPANY':'WORKER'}</span><h1>{localized(title,language)}</h1></div><div className="portal-header-tools"><LanguageToggle/><div className="top-user">{initials(accountName)}</div></div></header>
@@ -457,7 +462,7 @@ function CompanyOnboarding() {
   return <LocalizedTree><div className="onboarding-wrap"><div className="onboarding-story"><div className="onboarding-seal"><BadgeCheck size={22}/></div><div className="eyebrow">COMPANY</div><h2>Set up<br/><em>your company.</em></h2><p>Add company details to create your SANAD workspace.</p></div><form className="surface onboarding-form" onSubmit={submit}><div className="panel-kicker">COMPANY PROFILE</div><h3>Company details</h3><label>Company name<input required minLength={2} maxLength={160} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Marina House"/></label><label>Commercial registration number<input maxLength={100} value={registration} onChange={e=>setRegistration(e.target.value)} placeholder="Optional"/></label><label>Contact email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="team@company.com"/></label>{create.isError&&<div className="form-notice" role="alert">Couldn’t set up your company. Check the details and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Creating…':'Create workspace'} <ArrowUpRight size={15}/></PillButton><small><ShieldCheck size={13}/> Your company details stay within your workspace.</small></form></div></LocalizedTree>;
 }
 function CompanyOverview() {
-  const q=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
+  const q=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey(),retry:false}});
   const notConfigured=q.isError&&isHttp404(q.error);
   return <PortalLayout company title={notConfigured?'Set up your company':'Overview'}><QueryState loading={q.isLoading} error={q.isError&&!notConfigured} retry={()=>void q.refetch()}>{notConfigured?<CompanyOnboarding/>:q.data&&<><div className="overview-actions company-overview-actions"><DemoFlag demo={q.data.isDemo}/><Link href="/company/workers" className="solid-button" data-testid="link-manage-workers"><Users size={15}/> Manage Workers</Link></div><div className="metric-grid metric-grid-three"><Metric label="Tips received" value={money(q.data.totalTipsFils)} caption="Across your team" icon={Wallet} accent/><Metric label="This month" value={money(q.data.monthTipsFils)} caption="All team tips" icon={ArrowUpRight}/><Metric label="Pending payroll" value={money(q.data.pendingTipsFils)} caption="Ready to record" icon={Clock3}/></div><section className="surface data-section"><div className="section-heading"><h3>Recent tips</h3><Link href="/company/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div><TransactionTable transactions={q.data.recentTransactions}/></section></>}</QueryState></PortalLayout>;
 }
@@ -508,7 +513,7 @@ function CompanyReports() {
   return <PortalLayout company title="Reports"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<section className="surface report-panel"><div className="report-title"><div className="report-icon"><FileText/></div><div><span className="panel-kicker">MONTHLY REPORT</span><h3>{monthName(q.data.month,language)}</h3></div><label className="month-picker"><span>Month</span><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><DemoFlag demo={q.data.isDemo}/></div><div className="report-rows"><div><span>Total tips</span><strong>{money(q.data.tipsFils)}</strong></div><div><span>Pending payroll</span><strong>{money(q.data.pendingFils)}</strong></div><div><span>Paid out</span><strong>{money(q.data.paidOutFils)}</strong></div><div><span>Workers</span><strong>{q.data.workerCount}</strong></div><div><span>Transactions</span><strong>{q.data.transactionCount}</strong></div></div><button className="outline-button" onClick={()=>downloadCsv([{month:monthName(q.data!.month),tips:money(q.data!.tipsFils),pending:money(q.data!.pendingFils),paidOut:money(q.data!.paidOutFils),workers:q.data!.workerCount,transactions:q.data!.transactionCount}],'sanad-monthly-report.csv')}><Download size={15}/> Download report</button></section>}</QueryState></PortalLayout>;
 }
 function CompanySettings() {
-  const q=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
+  const q=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey(),retry:false}});
   const create=useCreateCompanyProfile();
   const qc=useQueryClient();
   const [name,setName]=useState('');const [registration,setRegistration]=useState('');const [email,setEmail]=useState('');const [saved,setSaved]=useState(false);
