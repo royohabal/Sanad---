@@ -269,7 +269,7 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .cta-primary svg,.header-signup svg,.business-link svg,.preview-signup svg { transition:transform .2s; }
 .cta-primary:hover svg,.header-signup:hover svg,.business-link:hover svg,.preview-signup:hover svg { transform:translate(2px,-2px); }
 .landing-reveal { opacity:1; transform:none; }
-.how-section { max-width:1180px; padding:72px 8% 84px; margin:auto; }
+.how-section { max-width:1180px; padding:46px 8% 40px; margin:auto; }
 .how-heading { display:flex; flex-direction:column; align-items:flex-start; gap:7px; text-align:left; }
 .how-heading .eyebrow { flex:none; }
 .how-heading h2 { width:100%; margin:0; color:#3B1720; font-size:clamp(25px,3vw,36px); line-height:1.17; letter-spacing:-.06em; text-align:left; }
@@ -309,6 +309,7 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .demo-success button { border:0; background:transparent; color:#F0C2A4; font-size:8px; font-weight:800; text-decoration:underline; text-underline-offset:3px; }
 .demo-success button:hover { color:#FAF4EC; }
 .landing-business { gap:7%; }
+#for-business { padding-top:52px; }
 .company-preview { min-height:0; padding:22px; transition:transform .25s,box-shadow .25s; }
 .company-preview:hover { transform:translateY(-4px); box-shadow:0 26px 55px rgba(59,23,32,.13); }
 .company-preview .panel-topline { align-items:center; }
@@ -368,7 +369,7 @@ html[dir="rtl"] .demo-success { text-align:right; }
 @keyframes connector-pulse { 0%,100% { opacity:.45; } 50% { opacity:1; } }
 @keyframes logo-float { 0%,100% { transform:translateY(0); box-shadow:0 18px 45px rgba(59,23,32,.14); } 50% { transform:translateY(-7px); box-shadow:0 24px 48px rgba(59,23,32,.17); } }
 @media (max-width:767px) {
-  .how-section { padding:54px 23px 61px; }
+  .how-section { padding:34px 23px 34px; }
   .how-heading { display:block; }
   .how-heading h2 { margin-top:12px; }
   .how-steps { grid-template-columns:1fr; gap:21px; margin-top:28px; }
@@ -389,6 +390,7 @@ html[dir="rtl"] .demo-success { text-align:right; }
   .worker-preview { padding:18px; }
   .worker-demo-metrics { gap:8px; }
   .worker-demo-metric { padding:11px; }
+  #for-business { padding-top:36px; }
 }
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
