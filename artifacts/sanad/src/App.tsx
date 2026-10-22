@@ -471,7 +471,7 @@ function Metric({ label, value, caption, icon: Icon, accent = false }: { label: 
 }
 function Header() {
   const { language } = useLanguage();
-  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#how-it-works" data-testid="link-nav-how">{language === 'ar' ? 'كيف يعمل' : 'How it works'}</a><a href="#for-business" data-testid="link-nav-business">{language === 'ar' ? 'للشركات' : 'For companies'}</a></nav><div className="header-actions"><LanguageToggle/><Link className="header-worker-signin" href="/worker/sign-in" aria-label={language === 'ar' ? 'تسجيل دخول الموظف' : 'Worker sign in'} data-testid="link-sign-in"><LogIn size={14}/><span className="worker-signin-full">{language === 'ar' ? 'دخول الموظف' : 'Worker sign in'}</span><span className="worker-signin-compact">{language === 'ar' ? 'موظف' : 'Worker'}</span></Link><Link className="header-signup" href="/sign-in" data-testid="link-get-started">{language === 'ar' ? 'تسجيل دخول الشركة' : 'Company sign in'} <ArrowUpRight size={15}/></Link></div></header>;
+  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#how-it-works" data-testid="link-nav-how">{language === 'ar' ? 'كيف يعمل' : 'How it works'}</a><a href="#for-business" data-testid="link-nav-business">{language === 'ar' ? 'للشركات' : 'For companies'}</a><a href="#for-workers" data-testid="link-nav-workers">{language === 'ar' ? 'للموظفين' : 'For workers'}</a></nav><div className="header-actions"><LanguageToggle/><Link className="header-worker-signin" href="/worker/sign-in" aria-label={language === 'ar' ? 'تسجيل دخول الموظف' : 'Worker sign in'} data-testid="link-sign-in"><LogIn size={14}/><span className="worker-signin-full">{language === 'ar' ? 'دخول الموظف' : 'Worker sign in'}</span><span className="worker-signin-compact">{language === 'ar' ? 'موظف' : 'Worker'}</span></Link><Link className="header-signup" href="/sign-in" data-testid="link-get-started">{language === 'ar' ? 'تسجيل دخول الشركة' : 'Company sign in'} <ArrowUpRight size={15}/></Link></div></header>;
 }
 function Landing() {
   const { language } = useLanguage();
@@ -488,7 +488,7 @@ function Landing() {
       <div className="hero-copy landing-hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> {ar ? 'الكويت · إكراميات رقمية' : 'KUWAIT · DIGITAL TIPPING'}</div>
         <h1>{ar ? <>شكراً،<br/><em>بطريقة أسهل.</em></> : <>A simple way<br/>to say <em>thank you.</em></>}</h1>
         <p>{ar ? <>يقدم الضيوف الإكراميات لموظفي الخدمة في الكويت عبر رموز QR الشخصية، بينما تدير الشركات الفرق <span className="keep-together">وسجلات الإكراميات والرواتب.</span></> : <>Guests tip service workers in Kuwait through personal QR codes, while companies manage teams, tip activity, <span className="keep-together">and payroll records.</span></>}</p>
-        <div className="hero-actions"><Link href="/sign-up" className="cta-primary" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For Companies'} <ArrowUpRight size={17}/></Link><Link href="/worker/sign-in" className="cta-quiet" data-testid="link-worker-signin-hero">{ar ? 'للموظفين' : 'For Workers'} <ChevronRight size={16}/></Link></div>
+        <div className="hero-actions"><Link href="/sign-up" className="cta-primary" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For Companies'} <ArrowUpRight size={17}/></Link><a href="#for-workers" className="cta-quiet" data-testid="link-worker-section-hero">{ar ? 'للموظفين' : 'For Workers'} <ChevronRight size={16}/></a></div>
         <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? publicTestCheckout ? (ar ? 'وضع Stripe التجريبي · لا توجد رسوم حقيقية' : 'Stripe test mode · no real charge') : (ar ? 'عرض عام · جرّب محاكاة إكرامية' : 'Public demo · try a simulated tip') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
       </div>
       <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark"><Handshake className="landing-handshake" strokeWidth={1.45}/></div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
@@ -498,8 +498,11 @@ function Landing() {
       <div className="how-steps">
         <article className="how-step"><span className="how-icon"><Users size={21}/></span><small>01</small><h3>{ar ? 'أضف الموظفين' : 'Company adds workers'}</h3><p>{ar ? 'تضيف الشركة فريقها إلى سند.' : 'The company adds its team to SANAD.'}</p></article>
         <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>02</small><h3>{ar ? 'استلم رمزك' : 'Worker gets a QR'}</h3><p>{ar ? 'يحصل كل موظف على رمز QR شخصي.' : 'Each worker gets a personal QR badge.'}</p></article>
-         <article className="how-step"><span className="how-icon"><Heart size={21}/></span><small>03</small><h3>{ar ? 'امسح وأرسل إكرامية' : 'Guest scans and tips'}</h3><p>{ar ? 'يمسح الضيف الرمز ويرسل إكرامية للموظف.' : 'A guest scans the code and sends the worker a tip.'}</p></article>
+          <article className="how-step"><span className="how-icon"><Heart size={21}/></span><small>03</small><h3>{ar ? 'امسح وأرسل إكرامية' : 'Guest scans and tips'}</h3><p>{ar ? 'يمسح الضيف الرمز ويرسل إكرامية للموظف.' : 'A guest scans the code and sends the worker a tip.'}</p></article>
       </div>
+    </section>
+    <section id="for-business" className="business-section landing-business landing-reveal"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? <>تقدير أوضح،<br/>لفريقك.</> : <>A clearer way<br/>to value <em>your team.</em></>}</h2><ul><li><BadgeCheck/>{ar ? 'رموز QR شخصية لكل موظف' : 'Personal QR badges for every worker'}</li><li><BadgeCheck/>{ar ? 'سجلات واضحة للإكراميات والرواتب' : 'Clear tip and payroll records'}</li></ul><Link href="/sign-up" className="business-link" data-testid="link-company-signup">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div>
+       <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'أحمد' : 'Ahmed'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">AH</span><span><b>{ar ? 'أحمد' : 'Ahmed'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
     </section>
      <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'جرّب محاكاة إكرامية محفوظة. لا يتم إجراء دفع أو تحويل مبلغ حقيقي.' : 'Try a saved tip simulation. No payment or real payout is made.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
       <div className="tip-demo" aria-live="polite">
@@ -511,8 +514,31 @@ function Landing() {
         </>}
       </div>
     </section>
-    <section id="for-business" className="business-section landing-business landing-reveal"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? <>تقدير أوضح،<br/>لفريقك.</> : <>A clearer way<br/>to value <em>your team.</em></>}</h2><ul><li><BadgeCheck/>{ar ? 'رموز QR شخصية لكل موظف' : 'Personal QR badges for every worker'}</li><li><BadgeCheck/>{ar ? 'سجلات واضحة للإكراميات والرواتب' : 'Clear tip and payroll records'}</li></ul><Link href="/sign-up" className="business-link" data-testid="link-company-signup">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div>
-       <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'أحمد' : 'Ahmed'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">AH</span><span><b>{ar ? 'أحمد' : 'Ahmed'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
+    <section id="for-workers" className="business-section landing-business worker-section landing-reveal" aria-labelledby="worker-section-title">
+      <div className="business-copy">
+        <div className="eyebrow">{ar ? 'للموظفين' : 'FOR WORKERS'}</div>
+        <h2 id="worker-section-title">{ar ? 'إكرامياتك، واضحة أمامك.' : <>Your tips,<br/>clearly in view.</>}</h2>
+        <p>{ar ? 'اطّلع على رمزك الشخصي، وتابع الإكراميات والتقييمات وسجلات الرواتب التي تسجلها شركتك من لوحة واحدة.' : 'Check your personal QR badge, follow tips and ratings, and review payroll records from one simple dashboard.'}</p>
+        <ul><li><BadgeCheck/>{ar ? 'رمز QR شخصي للمشاركة' : 'Your own QR badge to share'}</li><li><BadgeCheck/>{ar ? 'سجل الإكراميات والمدفوعات المسجلة' : 'Tip history and recorded payouts'}</li></ul>
+        <Link href="/worker/sign-in" className="business-link" data-testid="link-worker-signin-section">{ar ? 'دخول الموظف' : 'Worker sign in'} <ArrowUpRight size={16}/></Link>
+      </div>
+      <div className="business-panel worker-preview">
+        <div className="panel-topline"><span>{ar ? 'معاينة لوحة الموظف' : 'WORKER PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div>
+        <div className="worker-demo-profile">
+          <span className="worker-demo-avatar">SW</span>
+          <div><strong>{ar ? 'موظف تجريبي' : 'Sample worker'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service worker · Preview'}</small></div>
+          <QrCode className="worker-demo-qr" size={20}/>
+        </div>
+        <div className="worker-demo-metrics">
+          <div className="worker-demo-metric"><span>{ar ? 'الإكراميات المستلمة' : 'TIPS RECEIVED'}</span><strong>KWD 9.250</strong><small>{ar ? 'الإجمالي' : 'All time'}</small></div>
+          <div className="worker-demo-metric"><span>{ar ? 'بانتظار الصرف' : 'AWAITING PAYOUT'}</span><strong>KWD 7.250</strong><small>{ar ? 'مسجلة في الرواتب' : 'Recorded in payroll'}</small></div>
+        </div>
+        <div className="worker-demo-tip">
+          <span className="worker-demo-tip-icon"><Heart size={14}/></span>
+          <span className="worker-demo-tip-copy"><strong>{ar ? 'آخر إكرامية' : 'Latest tip'}</strong><small>{ar ? 'معاينة · منذ قليل' : 'Sample · Just now'}</small></span>
+          <strong>KWD 1.000</strong>
+        </div>
+      </div>
     </section>
     <Footer/>
   </main></LocalizedTree>;
