@@ -263,10 +263,10 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .cta-quiet:hover { color:#9B5A4C; transform:translateY(-1px); }
 .landing-mark { animation: logo-float 6.5s ease-in-out infinite; transition: transform .35s, box-shadow .35s; }
 .landing-mark-art:hover .landing-mark { filter:drop-shadow(0 0 14px rgba(239,128,95,.42)); }
-.cta-primary,.header-signup,.business-link,.cta-quiet,.preview-signup,.real-tip-link { transition:transform .2s,color .2s,background .2s; }
+.cta-primary,.header-signup,.business-link,.cta-quiet,.preview-signup { transition:transform .2s,color .2s,background .2s; }
 .cta-primary:hover,.header-signup:hover { transform:translateY(-2px); }
-.cta-primary svg,.header-signup svg,.business-link svg,.preview-signup svg,.real-tip-link svg { transition:transform .2s; }
-.cta-primary:hover svg,.header-signup:hover svg,.business-link:hover svg,.preview-signup:hover svg,.real-tip-link:hover svg { transform:translate(2px,-2px); }
+.cta-primary svg,.header-signup svg,.business-link svg,.preview-signup svg { transition:transform .2s; }
+.cta-primary:hover svg,.header-signup:hover svg,.business-link:hover svg,.preview-signup:hover svg { transform:translate(2px,-2px); }
 .landing-reveal { opacity:1; transform:none; }
 .how-section { max-width:1180px; padding:72px 8% 84px; margin:auto; }
 .how-heading { display:flex; flex-direction:column; align-items:flex-start; gap:7px; text-align:left; }
@@ -299,8 +299,6 @@ html[dir="rtl"] .company-badge-person { text-align:start; }
 .demo-stars button:hover { background:rgba(239,155,128,.15); transform:scale(1.08); }
 .demo-submit { width:100%; min-height:42px; display:flex; justify-content:center; align-items:center; gap:7px; border:0; border-radius:99px; background:#FAF4EC; color:#581C2B; font-size:10px; font-weight:800; transition:background .2s,transform .2s; }
 .demo-submit:hover { transform:translateY(-1px); background:#F2DFD0; }
-.real-tip-link { display:flex; width:max-content; align-items:center; gap:5px; margin:13px auto 0; color:#F0C2A4; font-size:9px; font-weight:700; }
-.real-tip-link:hover { color:#FAF4EC; }
 .demo-success { display:flex; align-items:center; gap:11px; padding:10px 0 2px; }
 .demo-success-icon { width:35px; height:35px; flex:none; display:grid; place-items:center; border-radius:50%; background:#E6F0E4; color:#426343; }
 .demo-success>div { flex:1; }

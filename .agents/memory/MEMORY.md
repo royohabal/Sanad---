@@ -3,3 +3,4 @@
 - [SANAD worker photos](sanad-worker-photos.md) — store worker image bytes in Atlas GridFS; keep upload authorization and public serving tied to the worker record.
 - [SANAD interface direction](sanad-ui-guidelines.md) — keep public, worker, company, and Arabic pages short, task-specific, and RTL-ready.
 - [GitHub push authorization](github-push-authorization.md) — a configured remote does not guarantee push credentials; confirm the GitHub integration is ready before pushing.
+- [Vercel API dependency packaging](sanad-vercel-runtime.md) — bundle the MongoDB driver in the API output; externalizing it caused deployed runtime import failures.
