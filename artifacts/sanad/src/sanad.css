@@ -25,6 +25,7 @@
 .hero-copy h1,.auth-copy h1 { color:#3B1720; font-size:clamp(50px,6.4vw,88px); line-height:1.03; letter-spacing:-.075em; font-weight:600; margin:24px 0 22px; }
 .hero-copy h1 em,.section-intro h2 em,.business-copy h2 em,.last-call h2 em,.auth-copy h1 em { color:#9C5045; font-family:Georgia,serif; font-weight:400; letter-spacing:-.07em; }
 .hero-copy p { max-width:405px; font-size:15px; line-height:1.8; color:#715E58; }
+.keep-together { white-space:nowrap; }
 .hero-actions { display:flex; align-items:center; gap:24px; margin-top:31px; }
 .cta-primary { min-height:50px; padding:0 24px; }
 .cta-quiet { color:#581C2B; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px; }
