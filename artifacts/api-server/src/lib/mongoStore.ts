@@ -341,6 +341,16 @@ export async function getWorkerById(id: string): Promise<Worker | null> {
   return document ? withoutMongoId<Worker>(document) : null;
 }
 
+export async function getWorkerByPhotoReference(
+  photoUrl: string,
+): Promise<Worker | null> {
+  const document = await (await collection("workers")).findOne({
+    photoUrl,
+    status: "active",
+  });
+  return document ? withoutMongoId<Worker>(document) : null;
+}
+
 export async function getWorkerBySlug(slug: string): Promise<Worker | null> {
   const document = await (await collection("workers")).findOne({ slug });
   return document ? withoutMongoId<Worker>(document) : null;

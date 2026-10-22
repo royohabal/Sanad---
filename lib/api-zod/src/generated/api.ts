@@ -38,6 +38,19 @@ export const GetPublicWorkerResponse = zod.object({
 
 
 /**
+ * @summary Retrieve a worker's current public profile photo
+ */
+export const getPublicWorkerPhotoPathPhotoIdRegExp = new RegExp('^[a-fA-F0-9]{24}$');
+
+
+export const GetPublicWorkerPhotoParams = zod.object({
+  "photoId": zod.coerce.string().regex(getPublicWorkerPhotoPathPhotoIdRegExp)
+})
+
+export const GetPublicWorkerPhotoResponse = zod.unknown()
+
+
+/**
  * @summary Create a short-lived KWD-to-USD tip quote
  */
 
@@ -227,6 +240,14 @@ export const WorkerLogoutResponse = zod.object({
 
 
 /**
+ * @summary Upload or replace the signed-in worker's own profile photo
+ */
+export const UploadWorkerProfilePhotoResponse = zod.object({
+  "photoUrl": zod.string().url()
+})
+
+
+/**
  * @summary Get the signed-in worker's earnings summary
  */
 export const getWorkerDashboardResponseRatingCountMin = 0;
@@ -243,6 +264,7 @@ export const GetWorkerDashboardResponse = zod.object({
   "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
+  "photoUrl": zod.string().url().nullish(),
   "status": zod.enum(['active', 'inactive', 'invited']),
   "totalTipsFils": zod.number().int(),
   "isDemo": zod.boolean()
@@ -314,6 +336,7 @@ export const GetWorkerBadgeResponse = zod.object({
   "workerSlug": zod.string(),
   "tippingUrl": zod.string().url(),
   "workerName": zod.string(),
+  "photoUrl": zod.string().url().nullish(),
   "companyName": zod.string(),
   "isDemo": zod.boolean()
 })
@@ -391,6 +414,7 @@ export const ListCompanyWorkersResponseItem = zod.object({
   "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
+  "photoUrl": zod.string().url().nullish(),
   "status": zod.enum(['active', 'inactive', 'invited']),
   "totalTipsFils": zod.number().int(),
   "isDemo": zod.boolean()
@@ -432,6 +456,7 @@ export const CreateCompanyWorkerResponse = zod.object({
   "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
+  "photoUrl": zod.string().url().nullish(),
   "status": zod.enum(['active', 'inactive', 'invited']),
   "totalTipsFils": zod.number().int(),
   "isDemo": zod.boolean()
@@ -449,6 +474,18 @@ export const IssueWorkerTemporaryPasswordParams = zod.object({
 
 export const IssueWorkerTemporaryPasswordResponse = zod.object({
   "temporaryPassword": zod.string()
+})
+
+
+/**
+ * @summary Upload or replace a worker photo in the signed-in company
+ */
+export const UploadCompanyWorkerPhotoParams = zod.object({
+  "workerId": zod.coerce.string()
+})
+
+export const UploadCompanyWorkerPhotoResponse = zod.object({
+  "photoUrl": zod.string().url()
 })
 
 
@@ -487,6 +524,7 @@ export const UpdateCompanyWorkerResponse = zod.object({
   "phoneNumber": zod.string().nullable(),
   "role": zod.string(),
   "branch": zod.string().nullable(),
+  "photoUrl": zod.string().url().nullish(),
   "status": zod.enum(['active', 'inactive', 'invited']),
   "totalTipsFils": zod.number().int(),
   "isDemo": zod.boolean()

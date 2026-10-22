@@ -20,6 +20,8 @@ export interface Worker {
   role: string;
   /** @nullable */
   branch: string | null;
+  /** @nullable */
+  photoUrl?: string | null;
   status: WorkerStatus;
   totalTipsFils: number;
   isDemo: boolean;

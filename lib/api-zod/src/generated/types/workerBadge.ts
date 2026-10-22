@@ -11,6 +11,8 @@ export interface WorkerBadge {
   workerSlug: string;
   tippingUrl: string;
   workerName: string;
+  /** @nullable */
+  photoUrl?: string | null;
   companyName: string;
   isDemo: boolean;
 }

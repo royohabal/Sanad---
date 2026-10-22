@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent, type ChangeEvent } from 'react';
 import './sanad.css';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk } from '@clerk/react';
@@ -22,7 +22,8 @@ import {
   useListCompanyPayouts, getListCompanyPayoutsQueryKey, useCreateCompanyPayout,
   useUpdateCompanyPayoutStatus, useGetCompanyReport, getGetCompanyReportQueryKey,
   useWorkerLogin, useGetWorkerAuthSession, getGetWorkerAuthSessionQueryKey,
-  useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword
+  useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword,
+  uploadWorkerProfilePhoto, uploadCompanyWorkerPhoto
 } from '@workspace/api-client-react';
 import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse, TipSimulationResponse } from '@workspace/api-client-react';
 import { MAX_TIP_AMOUNT_FILS, MIN_TIP_AMOUNT_FILS, parseKwdAmount } from './lib/tipAmount';
@@ -185,7 +186,7 @@ const arabicCopy: Record<string, string> = {
   'Review tips received across your company.':'راجع الإكراميات المستلمة عبر شركتك.','ALL TEAM TIPS':'كل إكراميات الفريق',
   'Search workers':'ابحث عن موظف','Tip records meet payroll':'الإكراميات وسجلات الرواتب','Keep payouts easy to follow.':'تابع المدفوعات بسهولة.',
   'Record a payout against a worker and payroll month. This creates a record only.':'سجل دفعة لموظف وشهر الرواتب. هذا الإجراء ينشئ سجلاً فقط.',
-  'Record a payout':'تسجيل دفعة','Marking a record paid means your employer recorded it in payroll. SANAD does not initiate or verify a bank transfer.':'تعني حالة «مدفوع» أن صاحب العمل سجّلها ضمن الرواتب. لا يبدأ سند تحويلاً بنكياً ولا يتحقق منه.',
+  'Record payout':'تسجيل دفعة','Record a payout':'تسجيل دفعة','Marking a record paid means your employer recorded it in payroll. SANAD does not initiate or verify a bank transfer.':'تعني حالة «مدفوع» أن صاحب العمل سجّلها ضمن الرواتب. لا يبدأ سند تحويلاً بنكياً ولا يتحقق منه.',
   'PAYROLL RECORDS':'سجلات الرواتب','Update record':'تحديث السجل','Payroll period':'فترة الرواتب','Recorded':'تاريخ التسجيل',
   'Guest / transaction':'الضيف / المعاملة','Received':'تاريخ الاستلام','Rating':'التقييم','Action':'الإجراء',
   'Amount':'المبلغ','Status':'الحالة','Saving…':'جارٍ الحفظ…','Mark pending':'تحديد كمعلّق','Mark paid':'تحديد كمدفوع',
@@ -315,6 +316,136 @@ function Avatar({ name, photo, size = 'md' }: { name: string; photo?: string | n
   }
   return <span className={className} aria-label={name}>{initials(name)}</span>;
 }
+async function prepareWorkerPhotoUpload(file: File): Promise<File> {
+  const maxRequestBytes = 4 * 1024 * 1024;
+  if (file.size <= maxRequestBytes) return file;
+
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Image could not be decoded.'));
+      element.src = sourceUrl;
+    });
+    if (!image.naturalWidth || !image.naturalHeight) {
+      throw new Error('Image dimensions are invalid.');
+    }
+
+    for (const maxDimension of [1800, 1400, 1100, 850]) {
+      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Image processing is unavailable.');
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      for (const quality of [0.88, 0.78, 0.68, 0.58]) {
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality));
+        if (!blob || blob.type !== 'image/webp') continue;
+        if (blob.size <= maxRequestBytes) {
+          return new File([blob], 'worker-profile.webp', {
+            type: 'image/webp',
+            lastModified: Date.now(),
+          });
+        }
+      }
+    }
+    throw new Error('Image could not be reduced to the upload limit.');
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+function WorkerPhotoEditor({
+  workerId, name, photoUrl, companyManaged = false, compact = false, onSaved,
+}: {
+  workerId: string;
+  name: string;
+  photoUrl?: string | null;
+  companyManaged?: boolean;
+  compact?: boolean;
+  onSaved?: () => void;
+}) {
+  const { language } = useLanguage();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const ar = language === 'ar';
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const selectPhoto = (event: ChangeEvent<HTMLInputElement>) => {
+    const candidate = event.target.files?.[0] ?? null;
+    event.target.value = '';
+    setError('');
+    setSaved(false);
+    if (!candidate) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(candidate.type)) {
+      setError(ar ? 'اختر صورة JPG أو PNG أو WebP.' : 'Choose a JPG, PNG, or WebP image.');
+      setFile(null);
+      return;
+    }
+    if (candidate.size > 5 * 1024 * 1024) {
+      setError(ar ? 'يجب ألا يتجاوز حجم الصورة ٥ ميغابايت.' : 'The photo must be 5 MB or smaller.');
+      setFile(null);
+      return;
+    }
+    setFile(candidate);
+  };
+
+  const savePhoto = async () => {
+    if (!file || saving) return;
+    setSaving(true);
+    setError('');
+    setSaved(false);
+    try {
+      const uploadFile = await prepareWorkerPhotoUpload(file);
+      if (companyManaged) {
+        await uploadCompanyWorkerPhoto(workerId, uploadFile, {
+          headers: { 'Content-Type': uploadFile.type },
+        });
+      } else {
+        await uploadWorkerProfilePhoto(uploadFile, {
+          headers: { 'Content-Type': uploadFile.type },
+        });
+      }
+      setFile(null);
+      setSaved(true);
+      onSaved?.();
+    } catch {
+      setError(ar ? 'تعذر حفظ الصورة. حاول مرة أخرى.' : 'Could not save the photo. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className={`worker-photo-editor${compact ? ' compact' : ''}`}>
+    <Avatar name={name} photo={previewUrl || photoUrl} size={compact ? 'sm' : 'lg'}/>
+    <div className="worker-photo-controls">
+      {!compact && <div className="worker-photo-copy"><strong>{ar ? 'الصورة الشخصية' : 'Profile photo'}</strong><span>{ar ? 'تظهر على ملفك وصفحة الإكرامية العامة.' : 'Shown on your worker profile and public tipping page.'}</span></div>}
+      <input ref={inputRef} className="worker-photo-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={selectPhoto} aria-label={ar ? 'اختر صورة شخصية' : 'Choose a profile photo'}/>
+      <div className="worker-photo-actions">
+        <button type="button" className="outline-button compact" onClick={() => inputRef.current?.click()} disabled={saving}>{ar ? 'اختيار صورة' : file || photoUrl ? 'Choose another photo' : 'Choose photo'}</button>
+        {file && <button type="button" className="solid-button compact" onClick={() => void savePhoto()} disabled={saving}>{saving ? (ar ? 'جارٍ الحفظ…' : 'Saving…') : (ar ? 'حفظ الصورة' : 'Save photo')}</button>}
+      </div>
+      {file && <span className="worker-photo-preview-note" role="status">{ar ? 'معاينة قبل الحفظ' : 'Previewing — save to apply this photo'}</span>}
+      {error && <span className="worker-photo-error" role="alert">{error}</span>}
+      {saved && <span className="worker-photo-success" role="status">{ar ? 'تم حفظ الصورة.' : 'Photo saved.'}</span>}
+    </div>
+  </div>;
+}
 function PillButton({ children, onClick, className = '', type = 'button', disabled }: { children: ReactNode; onClick?: () => void; className?: string; type?: 'button' | 'submit'; disabled?: boolean }) {
   return <button type={type} disabled={disabled} onClick={onClick} className={`pill-button ${className}`}>{children}</button>;
 }
@@ -372,7 +503,7 @@ function Landing() {
     </section>
      <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'جرّب محاكاة إكرامية محفوظة. لا يتم إجراء دفع أو تحويل مبلغ حقيقي.' : 'Try a saved tip simulation. No payment or real payout is made.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
       <div className="tip-demo" aria-live="polite">
-        <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span><strong>{ar ? 'جرّب إرسال الشكر' : 'Try a little thank you'}</strong></div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
+        <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span>{!ar&&<strong>Try a little thank you</strong>}</div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
         {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
           <div className="demo-amounts" role="group" aria-label={ar ? 'اختر مبلغاً تجريبياً' : 'Choose a sample tip amount'}>{demoAmounts.map((amount, index) => <button key={amount} type="button" data-testid={`button-demo-amount-${amount.replace('.', '-')}`} className={demoAmount === index ? 'selected' : ''} aria-pressed={demoAmount === index} onClick={() => setDemoAmount(index)}>KWD {amount}</button>)}</div>
           <div className="demo-controls"><div><span>{ar ? 'تقييم اختياري' : 'OPTIONAL RATING'}</span><div className="demo-stars" role="group" aria-label={ar ? 'اختر تقييماً' : 'Choose a rating'}>{[1,2,3,4,5].map((rating) => <button key={rating} type="button" data-testid={`button-demo-rating-${rating}`} aria-label={`${rating} ${ar ? 'نجوم' : rating === 1 ? 'star' : 'stars'}`} aria-pressed={demoRating === rating} onClick={() => setDemoRating(demoRating === rating ? null : rating)}><Star size={17} fill={demoRating && rating <= demoRating ? 'currentColor' : 'none'}/></button>)}</div></div><strong data-testid="text-demo-selected-amount">KWD {demoAmounts[demoAmount]}</strong></div>
@@ -693,7 +824,7 @@ function PortalLayout({ children, company = false, title = 'Overview' }: { child
   }
   return <LocalizedTree><div className="portal">
     <aside id="portal-navigation" aria-label={company?'Company navigation':'Worker navigation'} className={`portal-sidebar ${mobileNav?'sidebar-open':''}`}><div className="side-brand"><Brand/><button className="mobile-close" onClick={()=>setMobileNav(false)} aria-label="Close menu"><X size={18}/></button></div>
-      <div className="side-profile"><Avatar name={accountName} size="md"/><div><strong>{accountName}</strong><span>{accountRole}</span></div></div>
+      <div className="side-profile"><Avatar name={accountName} photo={company ? null : workerAccount.data?.worker.photoUrl} size="md"/><div><strong>{accountName}</strong><span>{accountRole}</span></div></div>
       <span className="side-section">{companyProfileMissing?'COMPANY SETUP':company?'MANAGE YOUR TEAM':'YOUR SANAD'}</span><nav className="side-nav">{nav.map((item)=>{const active=currentPath===item.href;const Icon=item.icon;return <Link href={item.href} key={item.href} onClick={()=>setMobileNav(false)} className={`side-link ${active?'active':''}`} aria-current={active?'page':undefined} data-testid={`link-nav-${item.href.split('/').pop()}`}><Icon size={17}/><span>{item.label}</span></Link>})}</nav>
        <div className="sidebar-bottom">{!companyProfileMissing&&<Link href={company?'/company/settings':'/worker/settings'} onClick={()=>setMobileNav(false)} className={`side-link side-secondary ${currentPath===(company?'/company/settings':'/worker/settings')?'active':''}`} data-testid="link-nav-settings"><Settings size={17}/><span>Settings</span></Link>}{!company&&workerSession.data?.authenticated&&<button type="button" className="side-link side-secondary side-link-button" data-testid="button-worker-signout" onClick={()=>workerLogout.mutate(undefined,{onSuccess:()=>{queryClient.clear();setLocation('/worker/sign-in')}})}><LogOut size={17}/><span>Sign out</span></button>}<div className="sidebar-help"><div className="help-icon"><CircleHelp size={17}/></div><strong>Need a hand?</strong><span>We’re here to help.</span><a href="mailto:hello@sanad.kw">Get in touch <ArrowUpRight size={12}/></a></div><span className="side-version">SANAD · KUWAIT</span></div>
     </aside>
@@ -754,7 +885,7 @@ function WorkerQr() {
   const rawUrl=q.data ? q.data.tippingUrl || `${window.location.origin}${basePath}/tip/${q.data.workerSlug}` : '';
   const url=rawUrl ? baseAwareUrl(rawUrl) : '';
   const copy=async()=>{try{await navigator.clipboard.writeText(url);setCopied(true);window.setTimeout(()=>setCopied(false),1800)}catch{setCopied(false)}};
-  return <PortalLayout title="My QR Badge"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<div className="qr-page-grid"><section className="surface qr-preview"><div className="badge-company">{q.data.companyName}</div><Avatar name={q.data.workerName} size="md"/><h3>{q.data.workerName}</h3><span>Scan to tip</span><div className="qr-large"><QRCodeSVG className="real-qr" value={url} size={190} level="H" includeMargin fgColor="#3B1720" bgColor="#FFFFFF" title={`SANAD tip QR for ${q.data.workerName}`}/></div><DemoFlag demo={q.data.isDemo}/></section><section className="surface qr-instructions"><div className="panel-kicker">TIP LINK</div><h3>Share your badge</h3><div className="copy-link"><span>{url}</span><button onClick={()=>void copy()} data-testid="button-copy-link">{copied?<Check size={15}/>:<span>Copy</span>}</button></div><PillButton onClick={()=>window.print()} className="download-badge"><Download size={15}/> Print badge</PillButton></section></div>}</QueryState></PortalLayout>;
+  return <PortalLayout title="My QR Badge"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<div className="qr-page-grid"><section className="surface qr-preview"><div className="badge-company">{q.data.companyName}</div><Avatar name={q.data.workerName} photo={q.data.photoUrl} size="md"/><h3>{q.data.workerName}</h3><span>Scan to tip</span><div className="qr-large"><QRCodeSVG className="real-qr" value={url} size={190} level="H" includeMargin fgColor="#3B1720" bgColor="#FFFFFF" title={`SANAD tip QR for ${q.data.workerName}`}/></div><DemoFlag demo={q.data.isDemo}/></section><section className="surface qr-instructions"><div className="panel-kicker">TIP LINK</div><h3>Share your badge</h3><div className="copy-link"><span>{url}</span><button onClick={()=>void copy()} data-testid="button-copy-link">{copied?<Check size={15}/>:<span>Copy</span>}</button></div><PillButton onClick={()=>window.print()} className="download-badge"><Download size={15}/> Print badge</PillButton></section></div>}</QueryState></PortalLayout>;
 }
 function WorkerSettings() {
   const q=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
@@ -782,7 +913,7 @@ function WorkerSettings() {
   };
   return <PortalLayout title="Settings"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<>
     <div className="welcome-row"><div><div className="eyebrow">Your SANAD profile</div><h2>Your details, kept simple.</h2><p>Profile information is managed by your company.</p></div></div>
-    <section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Phone number</span><strong dir="ltr">{q.data.worker.phoneNumber||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section>
+    <section className="surface settings-panel"><div className="settings-person"><Avatar name={q.data.worker.name} photo={q.data.worker.photoUrl}/><div><h3>{q.data.worker.name}</h3><span>{q.data.worker.role} · {q.data.worker.branch}</span></div><Badge status={q.data.worker.status}/></div><WorkerPhotoEditor workerId={q.data.worker.id} name={q.data.worker.name} photoUrl={q.data.worker.photoUrl} onSaved={()=>void queryClient.invalidateQueries({queryKey:getGetWorkerDashboardQueryKey()})}/><div className="settings-row"><span>Display name</span><strong>{q.data.worker.name}</strong></div><div className="settings-row"><span>Arabic name</span><strong className="arabic">{q.data.worker.arabicName||'—'}</strong></div><div className="settings-row"><span>Phone number</span><strong dir="ltr">{q.data.worker.phoneNumber||'—'}</strong></div><div className="settings-row"><span>Team / branch</span><strong>{q.data.worker.branch||'—'}</strong></div><div className="notice-box"><ShieldCheck size={17}/><span>Need to update something? Ask your company manager to change your profile details.</span></div></section>
     <form className="surface settings-form worker-password-form" onSubmit={submitPasswordChange}>
       <div className="panel-kicker">SECURITY</div><h3>Change password</h3>
       <label>Current password<input data-testid="input-worker-current-password" required type="password" autoComplete="current-password" value={currentPassword} onChange={event=>{setCurrentPassword(event.target.value);setPasswordSaved(false)}}/></label>
@@ -834,7 +965,7 @@ function CompanyWorkers() {
   const reset=(worker:{id:string;name:string})=>{const prompt=language==='ar'?`إصدار كلمة مرور مؤقتة جديدة لـ ${worker.name}؟ سيؤدي ذلك إلى إنهاء الجلسات الحالية.`:`Issue a new temporary password for ${worker.name}? This will end their current sessions.`;if(!window.confirm(prompt))return;resetPassword.mutate({workerId:worker.id},{onSuccess:(result)=>{setCredentialWorker(worker.name);setTemporaryPassword(result.temporaryPassword);setOpen(true)}})};
   const copyPassword=async()=>{try{await navigator.clipboard.writeText(temporaryPassword);setPasswordCopied(true);window.setTimeout(()=>setPasswordCopied(false),1800)}catch{setPasswordCopied(false)}};
   const visible=(q.data||[]).filter(w=>`${w.name} ${w.phoneNumber||''} ${w.role} ${w.branch||''}`.toLowerCase().includes(filter.toLowerCase()));
-  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{resetPassword.isError&&<div className="form-notice" role="alert">Couldn’t issue a new temporary password. Try again.</div>}<section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{visible.length}</span></h3></div><div className="section-tools"><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>{setTemporaryPassword('');setCredentialWorker('');setOpen(true)}}><Users size={15}/> Add worker</button></div></div>{visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><Avatar name={w.name} size="sm"/><span><b>{w.name}</b><small dir="ltr">{w.phoneNumber||'No phone number'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><div className="worker-row-actions">{w.status==='active'&&<button className="outline-button compact" disabled={resetPassword.isPending} onClick={()=>reset({id:w.id,name:w.name})}>Reset password</button>}<button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></div></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><div className="modal-card"><button type="button" className="modal-close" onClick={closeModal} aria-label="Close"><X size={17}/></button>{temporaryPassword?<><div className="eyebrow">WORKER LOGIN</div><h2>{language==='ar'?`بيانات دخول ${credentialWorker}`:`Share with ${credentialWorker}`}</h2><p>Give this temporary password to the worker directly. It is shown only once.</p><div className="temporary-password" dir="ltr"><code>{temporaryPassword}</code><button type="button" className="outline-button compact" onClick={()=>void copyPassword()}>{passwordCopied?<Check size={14}/>:<Copy size={14}/>} {passwordCopied?'Copied':'Copy'}</button></div><div className="notice-box"><KeyRound size={16}/><span>The worker signs in with their phone number and changes this password at first sign-in.</span></div><PillButton type="button" onClick={closeModal}>Done <Check size={15}/></PillButton></>:<form onSubmit={submit}><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Phone number<input required type="tel" autoComplete="tel" dir="ltr" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice" role="alert">Couldn’t add this worker. Check the phone number and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form>}</div></div>}</PortalLayout>;
+  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{resetPassword.isError&&<div className="form-notice" role="alert">Couldn’t issue a new temporary password. Try again.</div>}<section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{visible.length}</span></h3></div><div className="section-tools"><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>{setTemporaryPassword('');setCredentialWorker('');setOpen(true)}}><Users size={15}/> Add worker</button></div></div>{visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><WorkerPhotoEditor workerId={w.id} name={w.name} photoUrl={w.photoUrl} companyManaged compact onSaved={()=>void refresh()}/><span><b>{w.name}</b><small dir="ltr">{w.phoneNumber||'No phone number'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><div className="worker-row-actions">{w.status==='active'&&<button className="outline-button compact" disabled={resetPassword.isPending} onClick={()=>reset({id:w.id,name:w.name})}>Reset password</button>}<button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></div></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><div className="modal-card"><button type="button" className="modal-close" onClick={closeModal} aria-label="Close"><X size={17}/></button>{temporaryPassword?<><div className="eyebrow">WORKER LOGIN</div><h2>{language==='ar'?`بيانات دخول ${credentialWorker}`:`Share with ${credentialWorker}`}</h2><p>Give this temporary password to the worker directly. It is shown only once.</p><div className="temporary-password" dir="ltr"><code>{temporaryPassword}</code><button type="button" className="outline-button compact" onClick={()=>void copyPassword()}>{passwordCopied?<Check size={14}/>:<Copy size={14}/>} {passwordCopied?'Copied':'Copy'}</button></div><div className="notice-box"><KeyRound size={16}/><span>The worker signs in with their phone number and changes this password at first sign-in.</span></div><PillButton type="button" onClick={closeModal}>Done <Check size={15}/></PillButton></>:<form onSubmit={submit}><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Phone number<input required type="tel" autoComplete="tel" dir="ltr" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice" role="alert">Couldn’t add this worker. Check the phone number and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form>}</div></div>}</PortalLayout>;
 }
 function CompanyTransactions() {
   const q=useListCompanyTransactions({query:{queryKey:getListCompanyTransactionsQueryKey()}});

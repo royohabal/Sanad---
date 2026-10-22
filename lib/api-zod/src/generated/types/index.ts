@@ -49,6 +49,8 @@ export * from './workerDashboard';
 export * from './workerInput';
 export * from './workerLoginInput';
 export * from './workerPasswordInput';
+export * from './workerPhotoResponse';
+export * from './workerPhotoUpload';
 export * from './workerSignoutResult';
 export * from './workerStatus';
 export * from './workerUpdate';

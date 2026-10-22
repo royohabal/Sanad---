@@ -1,6 +1,6 @@
 import { clerkClient, getAuth } from "@clerk/express";
 import { createHash, randomUUID } from "node:crypto";
-import { Router, type IRouter, type Request, type Response } from "express";
+import express, { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { getPublicAppOrigin } from "../lib/publicAppUrl";
 import type { Worker } from "@workspace/db";
@@ -30,6 +30,7 @@ import {
   getTipWithNames,
   getWorkerByClerkUserId,
   getWorkerById,
+  getWorkerByPhotoReference,
   getWorkerBySlug,
   getWorkersByCompany,
   linkInvitedWorker,
@@ -63,6 +64,16 @@ import {
   revokeWorkerSessions,
 } from "../lib/workerAuth";
 import {
+  deleteWorkerPhoto,
+  detectWorkerPhotoContentType,
+  getWorkerPhoto,
+  MAX_WORKER_PHOTO_BYTES,
+  parseWorkerPhotoReference,
+  storeWorkerPhoto,
+  validateWorkerPhoto,
+  workerPhotoReference,
+} from "../lib/workerPhotoStorage";
+import {
   CreateCompanyPayoutBody,
   CreateCompanyProfileBody,
   CreateCompanyWorkerBody,
@@ -77,6 +88,7 @@ import {
   GetCompanyReportQueryParams,
   GetCompanyReportResponse,
   GetPublicWorkerParams,
+  GetPublicWorkerPhotoParams,
   GetPublicWorkerResponse,
   GetTipStatusParams,
   GetTipStatusResponse,
@@ -94,6 +106,9 @@ import {
   UpdateCompanyWorkerBody,
   UpdateCompanyWorkerParams,
   UpdateCompanyWorkerResponse,
+  UploadCompanyWorkerPhotoParams,
+  UploadCompanyWorkerPhotoResponse,
+  UploadWorkerProfilePhotoResponse,
   SimulateTipBody,
   SimulateTipResponse,
 } from "@workspace/api-zod";
@@ -216,6 +231,106 @@ function makeUrl(req: Request, path: string): string {
     }
   }
   return new URL(`${basePath}${path}`, origin).toString();
+}
+
+function publicPhotoUrl(req: Request, storedPhotoUrl: string | null): string | null {
+  const fileId = parseWorkerPhotoReference(storedPhotoUrl);
+  if (!fileId) return storedPhotoUrl;
+  const origin = getPublicAppOrigin({
+    forwardedHost: req.get("x-forwarded-host"),
+    forwardedProto: req.get("x-forwarded-proto"),
+    host: req.get("host"),
+  });
+  return new URL(`/api/public/worker-photos/${fileId}`, origin).toString();
+}
+
+function photoUploadOriginAllowed(req: Request): boolean {
+  const origin = req.get("origin");
+  if (!origin) return true;
+  try {
+    const originHost = new URL(origin).host.toLowerCase();
+    const allowedHosts = [
+      req.get("x-forwarded-host")?.split(",")[0]?.trim(),
+      req.get("host"),
+    ].filter((host): host is string => !!host).map((host) => host.toLowerCase());
+    return allowedHosts.includes(originHost);
+  } catch {
+    return false;
+  }
+}
+
+function parsePhotoUpload(req: Request, res: Response): {
+  bytes: Buffer;
+  contentType: NonNullable<ReturnType<typeof detectWorkerPhotoContentType>>;
+} | null {
+  if (!photoUploadOriginAllowed(req)) {
+    res.status(403).json({ error: "Photo uploads must come from this SANAD site." });
+    return null;
+  }
+  const bytes = Buffer.isBuffer(req.body) ? req.body : null;
+  const declaredType = req.get("content-type")?.split(";")[0]?.trim();
+  const validation = bytes
+    ? validateWorkerPhoto(bytes, declaredType)
+    : { valid: false as const, reason: "unsupported" as const };
+  if (!validation.valid && validation.reason === "too-large") {
+    res.status(413).json({ error: "Profile photos must be 5 MB or smaller." });
+    return null;
+  }
+  if (!bytes || !validation.valid) {
+    res.status(415).json({ error: "Upload a valid JPG, PNG, or WebP image." });
+    return null;
+  }
+  return { bytes, contentType: validation.contentType };
+}
+
+const rawPhotoUpload = express.raw({ type: () => true, limit: "6mb" });
+
+async function replaceWorkerProfilePhoto(
+  req: Request,
+  worker: Worker,
+  upload: {
+    bytes: Buffer;
+    contentType: NonNullable<ReturnType<typeof detectWorkerPhotoContentType>>;
+  },
+): Promise<string> {
+  let newFileId: string | null = null;
+  let workerUpdated = false;
+  try {
+    newFileId = await storeWorkerPhoto(worker.id, upload.bytes, upload.contentType);
+    const updated = await updateWorker(worker.id, {
+      photoUrl: workerPhotoReference(newFileId),
+    });
+    if (!updated) throw new Error("Worker record was not updated");
+    workerUpdated = true;
+
+    const previousFileId = parseWorkerPhotoReference(worker.photoUrl);
+    if (previousFileId && previousFileId !== newFileId) {
+      try {
+        await deleteWorkerPhoto(previousFileId);
+      } catch (error) {
+        req.log.warn(
+          {
+            workerId: worker.id,
+            errorType: error instanceof Error ? error.name : "UnknownError",
+          },
+          "Could not remove a replaced worker photo",
+        );
+      }
+    }
+
+    const photoUrl = publicPhotoUrl(req, updated.photoUrl);
+    if (!photoUrl) throw new Error("Worker photo URL was not created");
+    return photoUrl;
+  } catch (error) {
+    if (newFileId && !workerUpdated) {
+      try {
+        await deleteWorkerPhoto(newFileId);
+      } catch {
+        // Keep the original error; orphan cleanup can be retried separately.
+      }
+    }
+    throw error;
+  }
 }
 
 async function sumTipsForWorkers(
@@ -520,6 +635,39 @@ async function ensureLandingDemoWorker() {
   ].map((tip) => createTip(tip)));
 }
 
+router.get("/public/worker-photos/:photoId", async (req, res): Promise<void> => {
+  const params = GetPublicWorkerPhotoParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(404).end();
+    return;
+  }
+  const photoId = params.data.photoId.toLowerCase();
+  const worker = await getWorkerByPhotoReference(workerPhotoReference(photoId));
+  if (!worker) {
+    res.status(404).end();
+    return;
+  }
+  const photo = await getWorkerPhoto(photoId, worker.id);
+  if (!photo) {
+    res.status(404).end();
+    return;
+  }
+  res.setHeader("Content-Type", photo.contentType);
+  res.setHeader("Content-Length", String(photo.length));
+  res.setHeader("Content-Disposition", 'inline; filename="worker-profile-photo"');
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  photo.stream.on("error", (error) => {
+    req.log.error(
+      { workerId: worker.id, errorType: error instanceof Error ? error.name : "UnknownError" },
+      "Could not stream worker profile photo",
+    );
+    if (!res.headersSent) res.status(404).end();
+    else res.destroy();
+  });
+  photo.stream.pipe(res);
+});
+
 router.get("/public/workers/:slug", async (req, res): Promise<void> => {
   const params = GetPublicWorkerParams.safeParse(req.params);
   if (!params.success) {
@@ -534,7 +682,12 @@ router.get("/public/workers/:slug", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
-  res.json(GetPublicWorkerResponse.parse(row));
+  res.json(
+    GetPublicWorkerResponse.parse({
+      ...row,
+      photoUrl: publicPhotoUrl(req, row.photoUrl),
+    }),
+  );
 });
 
 router.post("/tips/quote", async (req, res): Promise<void> => {
@@ -1168,6 +1321,7 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
     phoneNumber: worker.phoneNumber,
     role: worker.role,
     branch: worker.branch,
+    photoUrl: publicPhotoUrl(req, worker.photoUrl),
     status: worker.status,
     totalTipsFils,
     isDemo: worker.isDemo,
@@ -1187,6 +1341,36 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
     }),
   );
 });
+
+router.post(
+  "/worker/profile/photo",
+  async (req, res, next): Promise<void> => {
+    if (!photoUploadOriginAllowed(req)) {
+      res.status(403).json({ error: "Photo uploads must come from this SANAD site." });
+      return;
+    }
+    const worker = await currentWorker(req, res);
+    if (!worker) return;
+    res.locals.profilePhotoWorker = worker;
+    next();
+  },
+  rawPhotoUpload,
+  async (req, res): Promise<void> => {
+    const worker = res.locals.profilePhotoWorker as Worker;
+    const upload = parsePhotoUpload(req, res);
+    if (!upload) return;
+    try {
+      const photoUrl = await replaceWorkerProfilePhoto(req, worker, upload);
+      res.json(UploadWorkerProfilePhotoResponse.parse({ photoUrl }));
+    } catch (error) {
+      req.log.error(
+        { workerId: worker.id, errorType: error instanceof Error ? error.name : "UnknownError" },
+        "Could not save worker profile photo",
+      );
+      res.status(500).json({ error: "Could not save the profile photo." });
+    }
+  },
+);
 
 router.get("/worker/transactions", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
@@ -1212,6 +1396,7 @@ router.get("/worker/badge", async (req, res): Promise<void> => {
       workerSlug: worker.slug,
       tippingUrl: makeUrl(req, `/tip/${worker.slug}`),
       workerName: worker.name,
+      photoUrl: publicPhotoUrl(req, worker.photoUrl),
       companyName: company?.name ?? "",
       isDemo: worker.isDemo,
     }),
@@ -1346,6 +1531,7 @@ router.get("/company/workers", async (req, res): Promise<void> => {
       phoneNumber: worker.phoneNumber,
       role: worker.role,
       branch: worker.branch,
+      photoUrl: publicPhotoUrl(req, worker.photoUrl),
       status: worker.status,
       totalTipsFils: await sumTipsForWorkers(
         [worker.id],
@@ -1463,6 +1649,56 @@ router.post("/company/workers/:workerId/temporary-password", async (req, res): P
   await writeAudit(membership.companyId, userId, "worker.password.reset", "worker", worker.id);
   res.json(IssueWorkerTemporaryPasswordResponse.parse({ temporaryPassword }));
 });
+
+router.post(
+  "/company/workers/:workerId/photo",
+  async (req, res, next): Promise<void> => {
+    if (!photoUploadOriginAllowed(req)) {
+      res.status(403).json({ error: "Photo uploads must come from this SANAD site." });
+      return;
+    }
+    const params = UploadCompanyWorkerPhotoParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const userId = currentUserId(req, res);
+    if (!userId) return;
+    const membership = await companyMembership(userId);
+    if (!membership) {
+      res.status(404).json({ error: "Company profile not found" });
+      return;
+    }
+    const worker = await getWorkerById(params.data.workerId);
+    if (!worker || worker.companyId !== membership.companyId) {
+      res.status(404).json({ error: "Worker not found" });
+      return;
+    }
+    res.locals.profilePhotoWorker = worker;
+    res.locals.profilePhotoCompanyId = membership.companyId;
+    res.locals.profilePhotoActorId = userId;
+    next();
+  },
+  rawPhotoUpload,
+  async (req, res): Promise<void> => {
+    const worker = res.locals.profilePhotoWorker as Worker;
+    const upload = parsePhotoUpload(req, res);
+    if (!upload) return;
+    try {
+      const photoUrl = await replaceWorkerProfilePhoto(req, worker, upload);
+      const companyId = res.locals.profilePhotoCompanyId as string;
+      const actorId = res.locals.profilePhotoActorId as string;
+      await writeAudit(companyId, actorId, "worker.photo.updated", "worker", worker.id);
+      res.json(UploadCompanyWorkerPhotoResponse.parse({ photoUrl }));
+    } catch (error) {
+      req.log.error(
+        { workerId: worker.id, errorType: error instanceof Error ? error.name : "UnknownError" },
+        "Could not save company-managed worker photo",
+      );
+      res.status(500).json({ error: "Could not save the profile photo." });
+    }
+  },
+);
 
 router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
   const userId = currentUserId(req, res);
@@ -1711,6 +1947,18 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     isDemo: company.isDemo,
   };
   res.json(GetCompanyReportResponse.parse(report));
+});
+
+router.use((error: unknown, req: Request, res: Response, next: NextFunction): void => {
+  const bodyError = error as { type?: string };
+  const isPhotoUploadRoute =
+    req.path.endsWith("/worker/profile/photo") ||
+    /^\/company\/workers\/[^/]+\/photo$/.test(req.path);
+  if (isPhotoUploadRoute && bodyError.type === "entity.too.large") {
+    res.status(413).json({ error: "Profile photos must be 5 MB or smaller." });
+    return;
+  }
+  next(error);
 });
 
 export default router;

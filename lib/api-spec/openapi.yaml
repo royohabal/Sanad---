@@ -50,6 +50,28 @@ paths:
               schema: { $ref: "#/components/schemas/PublicWorker" }
         "404":
           description: Worker not found
+  /public/worker-photos/{photoId}:
+    get:
+      operationId: getPublicWorkerPhoto
+      tags: [public]
+      summary: Retrieve a worker's current public profile photo
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+      responses:
+        "200":
+          description: Worker profile photo
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        "404":
+          description: Photo not found
   /tips/quote:
     post:
       operationId: createTipQuote
@@ -198,6 +220,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WorkerSignoutResult" }
+  /worker/profile/photo:
+    post:
+      operationId: uploadWorkerProfilePhoto
+      tags: [worker]
+      security: [{ clerkSession: [] }, { workerSession: [] }]
+      summary: Upload or replace the signed-in worker's own profile photo
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+          image/png:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+          image/webp:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+      responses:
+        "200":
+          description: Worker photo saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerPhotoResponse" }
+        "401":
+          description: Authentication required
+        "413":
+          description: Photo exceeds the 5 MB limit
+        "415":
+          description: Unsupported or invalid image
   /worker/dashboard:
     get:
       operationId: getWorkerDashboard
@@ -344,6 +393,40 @@ paths:
               schema: { $ref: "#/components/schemas/TemporaryPasswordResponse" }
         "401":
           description: Authentication required
+  /company/workers/{workerId}/photo:
+    post:
+      operationId: uploadCompanyWorkerPhoto
+      tags: [company]
+      security: [{ clerkSession: [] }]
+      summary: Upload or replace a worker photo in the signed-in company
+      parameters:
+        - name: workerId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+          image/png:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+          image/webp:
+            schema: { $ref: "#/components/schemas/WorkerPhotoUpload" }
+      responses:
+        "200":
+          description: Worker photo saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkerPhotoResponse" }
+        "401":
+          description: Authentication required
+        "404":
+          description: Worker not found in the signed-in company
+        "413":
+          description: Photo exceeds the 5 MB limit
+        "415":
+          description: Unsupported or invalid image
   /company/workers/{workerId}:
     patch:
       operationId: updateCompanyWorker
@@ -496,6 +579,13 @@ components:
         branch: { type: ["string", "null"] }
         photoUrl: { type: ["string", "null"], format: uri }
         isDemo: { type: boolean }
+    WorkerPhotoUpload:
+      type: string
+    WorkerPhotoResponse:
+      type: object
+      required: [photoUrl]
+      properties:
+        photoUrl: { type: string, format: uri }
     TipSimulationInput:
       type: object
       required: [workerSlug, amountFils, requestId]
@@ -617,6 +707,7 @@ components:
         phoneNumber: { type: ["string", "null"] }
         role: { type: string }
         branch: { type: ["string", "null"] }
+        photoUrl: { type: ["string", "null"], format: uri }
         status: { type: string, enum: [active, inactive, invited] }
         totalTipsFils: { type: integer }
         isDemo: { type: boolean }
@@ -705,6 +796,7 @@ components:
         workerSlug: { type: string }
         tippingUrl: { type: string, format: uri }
         workerName: { type: string }
+        photoUrl: { type: ["string", "null"], format: uri }
         companyName: { type: string }
         isDemo: { type: boolean }
     CompanyProfileInput:

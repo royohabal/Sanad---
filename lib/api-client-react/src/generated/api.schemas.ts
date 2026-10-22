@@ -24,6 +24,12 @@ export interface PublicWorker {
   isDemo: boolean;
 }
 
+export type WorkerPhotoUpload = string;
+
+export interface WorkerPhotoResponse {
+  photoUrl: string;
+}
+
 export interface TipSimulationInput {
   /**
      * @minLength 1
@@ -299,6 +305,8 @@ export interface Worker {
   role: string;
   /** @nullable */
   branch: string | null;
+  /** @nullable */
+  photoUrl?: string | null;
   status: WorkerStatus;
   totalTipsFils: number;
   isDemo: boolean;
@@ -438,6 +446,8 @@ export interface WorkerBadge {
   workerSlug: string;
   tippingUrl: string;
   workerName: string;
+  /** @nullable */
+  photoUrl?: string | null;
   companyName: string;
   isDemo: boolean;
 }

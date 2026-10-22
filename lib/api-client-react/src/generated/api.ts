@@ -47,6 +47,7 @@ import type {
   WorkerInput,
   WorkerLoginInput,
   WorkerPasswordInput,
+  WorkerPhotoResponse,
   WorkerSignoutResult,
   WorkerUpdate
 } from './api.schemas';
@@ -221,6 +222,83 @@ export function useGetPublicWorker<TData = Awaited<ReturnType<typeof getPublicWo
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPublicWorkerQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicWorkerPhotoUrl = (photoId: string,) => {
+
+
+
+
+  return `/api/public/worker-photos/${photoId}`
+}
+
+/**
+ * @summary Retrieve a worker's current public profile photo
+ */
+export const getPublicWorkerPhoto = async (photoId: string, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetPublicWorkerPhotoUrl(photoId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicWorkerPhotoQueryKey = (photoId: string,) => {
+    return [
+    `/api/public/worker-photos/${photoId}`
+    ] as const;
+    }
+
+
+export const getGetPublicWorkerPhotoQueryOptions = <TData = Awaited<ReturnType<typeof getPublicWorkerPhoto>>, TError = ErrorType<void>>(photoId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicWorkerPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicWorkerPhotoQueryKey(photoId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicWorkerPhoto>>> = ({ signal }) => getPublicWorkerPhoto(photoId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: photoId !== null && photoId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicWorkerPhoto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicWorkerPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicWorkerPhoto>>>
+export type GetPublicWorkerPhotoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Retrieve a worker's current public profile photo
+ */
+
+export function useGetPublicWorkerPhoto<TData = Awaited<ReturnType<typeof getPublicWorkerPhoto>>, TError = ErrorType<void>>(
+ photoId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicWorkerPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicWorkerPhotoQueryOptions(photoId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -900,6 +978,94 @@ export const useWorkerLogout = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getWorkerLogoutMutationOptions(options));
+    }
+
+export const getUploadWorkerProfilePhotoUrl = () => {
+
+
+
+
+  return `/api/worker/profile/photo`
+}
+
+/**
+ * @summary Upload or replace the signed-in worker's own profile photo
+ */
+export const uploadWorkerProfilePhoto = async (uploadWorkerProfilePhotoBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<WorkerPhotoResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkerPhotoResponse>(getUploadWorkerProfilePhotoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg', ...getHeaders(options?.headers) },
+    body: uploadWorkerProfilePhotoBody
+  }
+);}
+
+
+
+
+
+export const getUploadWorkerProfilePhotoMutationKey = () => ['uploadWorkerProfilePhoto'] as const;
+
+export const getUploadWorkerProfilePhotoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>, TError,UploadWorkerProfilePhotoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>, TError,UploadWorkerProfilePhotoMutationVariables, TContext> => {
+
+const mutationKey = getUploadWorkerProfilePhotoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>, UploadWorkerProfilePhotoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadWorkerProfilePhoto(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadWorkerProfilePhotoMutationResult = NonNullable<Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>>
+    export type UploadWorkerProfilePhotoMutationBody = BodyType<Blob>
+    export type UploadWorkerProfilePhotoMutationError = ErrorType<void>
+    export type UploadWorkerProfilePhotoMutationVariables = {data: BodyType<Blob>}
+
+    /**
+ * @summary Upload or replace the signed-in worker's own profile photo
+ */
+export const useUploadWorkerProfilePhoto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>, TError,UploadWorkerProfilePhotoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadWorkerProfilePhoto>>,
+        TError,
+        UploadWorkerProfilePhotoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadWorkerProfilePhotoMutationOptions(options));
     }
 
 export const getGetWorkerDashboardUrl = () => {
@@ -1612,6 +1778,95 @@ export const useIssueWorkerTemporaryPassword = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getIssueWorkerTemporaryPasswordMutationOptions(options));
+    }
+
+export const getUploadCompanyWorkerPhotoUrl = (workerId: string,) => {
+
+
+
+
+  return `/api/company/workers/${workerId}/photo`
+}
+
+/**
+ * @summary Upload or replace a worker photo in the signed-in company
+ */
+export const uploadCompanyWorkerPhoto = async (workerId: string,
+    uploadCompanyWorkerPhotoBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<WorkerPhotoResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<WorkerPhotoResponse>(getUploadCompanyWorkerPhotoUrl(workerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg', ...getHeaders(options?.headers) },
+    body: uploadCompanyWorkerPhotoBody
+  }
+);}
+
+
+
+
+
+export const getUploadCompanyWorkerPhotoMutationKey = () => ['uploadCompanyWorkerPhoto'] as const;
+
+export const getUploadCompanyWorkerPhotoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>, TError,UploadCompanyWorkerPhotoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>, TError,UploadCompanyWorkerPhotoMutationVariables, TContext> => {
+
+const mutationKey = getUploadCompanyWorkerPhotoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>, UploadCompanyWorkerPhotoMutationVariables> = (props) => {
+          const {workerId,data} = props ?? {};
+
+          return  uploadCompanyWorkerPhoto(workerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadCompanyWorkerPhotoMutationResult = NonNullable<Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>>
+    export type UploadCompanyWorkerPhotoMutationBody = BodyType<Blob>
+    export type UploadCompanyWorkerPhotoMutationError = ErrorType<void>
+    export type UploadCompanyWorkerPhotoMutationVariables = {workerId: string;data: BodyType<Blob>}
+
+    /**
+ * @summary Upload or replace a worker photo in the signed-in company
+ */
+export const useUploadCompanyWorkerPhoto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>, TError,UploadCompanyWorkerPhotoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadCompanyWorkerPhoto>>,
+        TError,
+        UploadCompanyWorkerPhotoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadCompanyWorkerPhotoMutationOptions(options));
     }
 
 export const getUpdateCompanyWorkerUrl = (workerId: string,) => {
