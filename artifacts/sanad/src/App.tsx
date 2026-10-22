@@ -368,7 +368,23 @@ function TipPage() {
   const { language } = useLanguage();
   const ar = language === 'ar';
   const checkoutEnabled = import.meta.env.DEV;
-  const { data: worker, isLoading, isError, refetch } = useGetPublicWorker(slug, { query: { enabled: !!slug, queryKey: getGetPublicWorkerQueryKey(slug) } });
+  const publishedDemoWorker = import.meta.env.PROD && slug === 'ahmed-almutairi'
+    ? {
+        id: '00000000-0000-4000-8000-000000000001',
+        slug,
+        name: 'Worker No. 1',
+        arabicName: 'الموظف رقم ١',
+        companyName: 'SANAD Demo',
+        role: 'Service host',
+        branch: 'Salmiya',
+        photoUrl: null,
+      }
+    : undefined;
+  const workerQuery = useGetPublicWorker(slug, { query: { enabled: !!slug && !publishedDemoWorker, queryKey: getGetPublicWorkerQueryKey(slug) } });
+  const worker = workerQuery.data ?? publishedDemoWorker;
+  const isLoading = !publishedDemoWorker && workerQuery.isLoading;
+  const isError = !publishedDemoWorker && workerQuery.isError;
+  const refetch = workerQuery.refetch;
   const quoteMutation = useCreateTipQuote();
   const checkout = useCreateTipCheckout();
   const [amount, setAmount] = useState(2000);
