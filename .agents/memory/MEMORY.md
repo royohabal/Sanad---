@@ -1,3 +1,4 @@
 - [SANAD payment integrity](sanad-payment-integrity.md) — demo tip records never represent a charge; only verified provider events may mark a real tip successful.
 - [SANAD MongoDB migration](sanad-mongodb-migration.md) — copy PostgreSQL records into MongoDB, verify them, switch runtime storage, and retain PostgreSQL unchanged as rollback.
 - [SANAD interface direction](sanad-ui-guidelines.md) — keep public, worker, company, and Arabic pages short, task-specific, and RTL-ready.
+- [GitHub push authorization](github-push-authorization.md) — a configured remote does not guarantee push credentials; confirm the GitHub integration is ready before pushing.
