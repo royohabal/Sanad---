@@ -487,7 +487,7 @@ function Landing() {
     <section className="hero-wrap landing-compact">
       <div className="hero-copy landing-hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> {ar ? 'الكويت · إكراميات رقمية' : 'KUWAIT · DIGITAL TIPPING'}</div>
         <h1>{ar ? <>شكراً،<br/><em>بطريقة أسهل.</em></> : <>A simple way<br/>to say <em>thank you.</em></>}</h1>
-        <p>{ar ? 'منصة بسيطة للشركات والموظفين لإدارة رموز الإكراميات الشخصية.' : 'A simple way for companies and workers to manage personal tipping badges.'}</p>
+        <p>{ar ? 'خصص لكل موظف صفحة إكرامية برمز QR، وتابع سجلات الإكراميات والرواتب لفريقك من مكان واحد.' : 'Give every worker a personal QR tipping page, and keep your team’s tip and payroll records organized in one place.'}</p>
         <div className="hero-actions"><Link href="/sign-up" className="cta-primary" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For Companies'} <ArrowUpRight size={17}/></Link><Link href="/worker/sign-in" className="cta-quiet" data-testid="link-worker-signin-hero">{ar ? 'للموظفين' : 'For Workers'} <ChevronRight size={16}/></Link></div>
         <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? publicTestCheckout ? (ar ? 'وضع Stripe التجريبي · لا توجد رسوم حقيقية' : 'Stripe test mode · no real charge') : (ar ? 'عرض عام · جرّب محاكاة إكرامية' : 'Public demo · try a simulated tip') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
       </div>
