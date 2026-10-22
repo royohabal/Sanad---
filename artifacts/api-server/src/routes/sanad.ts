@@ -1,5 +1,5 @@
 import { clerkClient, getAuth } from "@clerk/express";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import type { Worker } from "@workspace/db";
@@ -93,11 +93,42 @@ import {
   UpdateCompanyWorkerBody,
   UpdateCompanyWorkerParams,
   UpdateCompanyWorkerResponse,
+  SimulateTipBody,
+  SimulateTipResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-const successfulTipStatuses = ["succeeded", "demo"] as const;
+const realTipStatuses = ["succeeded"] as const;
+const demoTipStatuses = ["succeeded", "demo"] as const;
 const isDevelopment = process.env.NODE_ENV !== "production";
+const simulationRateLimits = new Map<string, { count: number; resetAt: number }>();
+const SIMULATION_RATE_WINDOW_MS = 15 * 60 * 1000;
+const SIMULATION_RATE_LIMIT = 30;
+
+function allowSimulatedTip(ip: string): boolean {
+  const now = Date.now();
+  const key = createHash("sha256").update(ip).digest("hex");
+  const current = simulationRateLimits.get(key);
+  if (!current || current.resetAt <= now) {
+    simulationRateLimits.set(key, {
+      count: 1,
+      resetAt: now + SIMULATION_RATE_WINDOW_MS,
+    });
+    return true;
+  }
+  if (current.count >= SIMULATION_RATE_LIMIT) return false;
+  current.count += 1;
+  if (simulationRateLimits.size > 10_000) {
+    for (const [rateKey, item] of simulationRateLimits) {
+      if (item.resetAt <= now) simulationRateLimits.delete(rateKey);
+    }
+  }
+  return true;
+}
+
+function tipStatusesForAccount(isDemo: boolean) {
+  return isDemo ? demoTipStatuses : realTipStatuses;
+}
 
 function currentUserId(req: Request, res: Response): string | null {
   const userId = getAuth(req).userId;
@@ -193,16 +224,61 @@ async function sumTipsForWorkers(
   workerIds: string[],
   statuses: readonly ("succeeded" | "demo" | "pending" | "failed" | "cancelled")[],
   range?: { from: Date; to: Date },
+  isDemo?: boolean,
 ): Promise<number> {
-  return sumMongoTipsForWorkers(workerIds, statuses, range);
+  return sumMongoTipsForWorkers(workerIds, statuses, range, isDemo);
+}
+
+async function sumTipsForWorkerRows(
+  workers: Array<{ id: string; isDemo: boolean }>,
+  range?: { from: Date; to: Date },
+): Promise<number> {
+  const [real, demo] = await Promise.all([
+    sumTipsForWorkers(
+      workers.filter((worker) => !worker.isDemo).map((worker) => worker.id),
+      realTipStatuses,
+      range,
+      false,
+    ),
+    sumTipsForWorkers(
+      workers.filter((worker) => worker.isDemo).map((worker) => worker.id),
+      demoTipStatuses,
+      range,
+      true,
+    ),
+  ]);
+  return real + demo;
 }
 
 async function sumPayoutsForWorkers(
   workerIds: string[],
   status?: "pending" | "paid",
   range?: { month: string },
+  isDemo?: boolean,
 ): Promise<number> {
-  return sumMongoPayoutsForWorkers(workerIds, status, range?.month);
+  return sumMongoPayoutsForWorkers(workerIds, status, range?.month, isDemo);
+}
+
+async function sumPayoutsForWorkerRows(
+  workers: Array<{ id: string; isDemo: boolean }>,
+  status?: "pending" | "paid",
+  range?: { month: string },
+): Promise<number> {
+  const [real, demo] = await Promise.all([
+    sumPayoutsForWorkers(
+      workers.filter((worker) => !worker.isDemo).map((worker) => worker.id),
+      status,
+      range,
+      false,
+    ),
+    sumPayoutsForWorkers(
+      workers.filter((worker) => worker.isDemo).map((worker) => worker.id),
+      status,
+      range,
+      true,
+    ),
+  ]);
+  return real + demo;
 }
 
 function monthRange(month: string) {
@@ -362,10 +438,21 @@ async function seedDemoCompany(companyId: string, actorId: string) {
 }
 
 async function ensureLandingDemoWorker() {
-  if (!isDevelopment) return;
   const slug = "ahmed-almutairi";
   const existing = await getWorkerBySlug(slug);
-  if (existing) return;
+  if (existing) {
+    if (
+      existing.isDemo &&
+      (/^Worker No\.\s*\d+$/i.test(existing.name) ||
+        /^الموظف رقم [٠-٩0-9]+$/.test(existing.arabicName ?? ""))
+    ) {
+      await updateWorker(existing.id, {
+        name: "Ahmed Almutairi",
+        arabicName: "أحمد المطيري",
+      });
+    }
+    return;
+  }
 
   let company = await getCompanyByNameAndDemo("SANAD Demo", true);
   if (!company) {
@@ -377,14 +464,16 @@ async function ensureLandingDemoWorker() {
     });
   }
   if (!company) return;
-  const worker = await createWorker({
+  let worker: Awaited<ReturnType<typeof getWorkerBySlug>>;
+  try {
+    worker = await createWorker({
       id: randomUUID(),
       companyId: company.id,
       clerkUserId: null,
       clerkInvitationId: null,
       slug,
-      name: "Worker No. 1",
-      arabicName: "الموظف رقم ١",
+      name: "Ahmed Almutairi",
+      arabicName: "أحمد المطيري",
       email: null,
       phoneNumber: null,
       workerPasswordHash: null,
@@ -395,6 +484,10 @@ async function ensureLandingDemoWorker() {
       status: "active",
       isDemo: true,
     });
+  } catch (error) {
+    if (await getWorkerBySlug(slug)) return;
+    throw error;
+  }
   if (!worker) return;
   await Promise.all([
     {
@@ -435,11 +528,10 @@ router.get("/public/workers/:slug", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  let row = await getPublicWorker(params.data.slug);
-  if (!row && params.data.slug === "ahmed-almutairi" && isDevelopment) {
+  if (params.data.slug === "ahmed-almutairi") {
     await ensureLandingDemoWorker();
-    row = await getPublicWorker(params.data.slug);
   }
+  const row = await getPublicWorker(params.data.slug);
   if (!row) {
     res.status(404).json({ error: "Worker not found" });
     return;
@@ -520,6 +612,119 @@ router.post("/tips/quote", async (req, res): Promise<void> => {
     );
     res.status(502).json({
       error: "Currency conversion is unavailable. No payment was made.",
+    });
+  }
+});
+
+router.post("/tips/simulate", async (req, res): Promise<void> => {
+  const body = SimulateTipBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({
+      error: "Enter a valid tip amount, rating, and request ID.",
+    });
+    return;
+  }
+
+  if (!allowSimulatedTip(req.ip || req.socket.remoteAddress || "unknown")) {
+    res.status(429).json({
+      error: "Too many demo tip simulations. Please wait and try again.",
+    });
+    return;
+  }
+
+  const worker = await getWorkerBySlug(body.data.workerSlug);
+  if (!worker || worker.status !== "active" || !worker.isDemo) {
+    res.status(404).json({
+      error: "Simulation is available only for demo workers.",
+    });
+    return;
+  }
+
+  const idempotencyKey = `simulate:${body.data.requestId}`;
+  const rating = body.data.rating ?? null;
+  const existing = await getTipByCheckoutRequestId(idempotencyKey);
+  if (existing) {
+    const sameRequest =
+      existing.workerId === worker.id &&
+      existing.amountFils === body.data.amountFils &&
+      existing.rating === rating &&
+      existing.status === "demo" &&
+      existing.isDemo === true &&
+      existing.stripeCheckoutSessionId == null &&
+      existing.stripePaymentIntentId == null;
+    if (!sameRequest) {
+      res.status(409).json({
+        error: "This request ID was already used for different tip details.",
+      });
+      return;
+    }
+
+    res.status(200).json(
+      SimulateTipResponse.parse({
+        tipId: existing.id,
+        workerSlug: worker.slug,
+        workerName: worker.name,
+        amountFils: existing.amountFils,
+        currency: "KWD",
+        status: "demo",
+        rating: existing.rating ?? null,
+        isDemo: true,
+      }),
+    );
+    return;
+  }
+
+  try {
+    const tip = await createTipIdempotently({
+      id: randomUUID(),
+      reference: `simulation_${body.data.requestId}`,
+      workerId: worker.id,
+      amountFils: body.data.amountFils,
+      processorFeeFils: 0,
+      refundedAmountFils: 0,
+      currency: "KWD",
+      status: "demo",
+      rating,
+      stripeCheckoutSessionId: null,
+      stripePaymentIntentId: null,
+      isDemo: true,
+      checkoutRequestId: idempotencyKey,
+    });
+
+    if (
+      tip.workerId !== worker.id ||
+      tip.amountFils !== body.data.amountFils ||
+      tip.rating !== rating ||
+      tip.status !== "demo" ||
+      tip.isDemo !== true ||
+      tip.stripeCheckoutSessionId != null ||
+      tip.stripePaymentIntentId != null
+    ) {
+      res.status(409).json({
+        error: "This request ID was already used for different tip details.",
+      });
+      return;
+    }
+
+    res.status(201).json(
+      SimulateTipResponse.parse({
+        tipId: tip.id,
+        workerSlug: worker.slug,
+        workerName: worker.name,
+        amountFils: tip.amountFils,
+        currency: "KWD",
+        status: "demo",
+        rating: tip.rating ?? null,
+        isDemo: true,
+      }),
+    );
+  } catch (error) {
+    req.log.error(
+      { errorType: error instanceof Error ? error.name : "UnknownError" },
+      "Could not save simulated SANAD tip",
+    );
+    res.status(503).json({
+      error: "We could not save the simulated tip. Please try again.",
     });
   }
 });
@@ -941,13 +1146,19 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
   const worker = await currentWorker(req, res);
   if (!worker) return;
   const company = await getCompanyById(worker.companyId);
+  const tipStatuses = tipStatusesForAccount(worker.isDemo);
   const [received, paid, monthTips, averageRating, recent, monthlyRows] = await Promise.all([
-    sumTipsForWorkers([worker.id], successfulTipStatuses),
-    sumPayoutsForWorkers([worker.id], "paid"),
-    sumTipsForWorkers([worker.id], successfulTipStatuses, monthRange(currentMonth())),
-    averageRatingForWorker(worker.id, successfulTipStatuses),
+    sumTipsForWorkers([worker.id], tipStatuses, undefined, worker.isDemo),
+    sumPayoutsForWorkers([worker.id], "paid", undefined, worker.isDemo),
+    sumTipsForWorkers(
+      [worker.id],
+      tipStatuses,
+      monthRange(currentMonth()),
+      worker.isDemo,
+    ),
+    averageRatingForWorker(worker.id, tipStatuses, worker.isDemo),
     workerTransactionRows(worker.id, 6),
-    monthlyTipsForWorker(worker.id, successfulTipStatuses),
+    monthlyTipsForWorker(worker.id, tipStatuses, worker.isDemo),
   ]);
   const totalTipsFils = received;
   const workerData = {
@@ -970,7 +1181,8 @@ router.get("/worker/dashboard", async (req, res): Promise<void> => {
       pendingTipsFils: Math.max(0, received - paid),
       paidTipsFils: paid,
       monthTipsFils: monthTips,
-      averageRating,
+      averageRating: averageRating.averageRating,
+      ratingCount: averageRating.ratingCount,
       monthly: monthlyRows,
       recentTransactions: recent.map(toTransaction),
       isDemo: worker.isDemo,
@@ -1081,13 +1293,14 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
   }
   const workers = await getWorkersByCompany(company.id);
   const workerIds = workers.map((worker) => worker.id);
+  const tipStatuses = tipStatusesForAccount(company.isDemo);
   const month = currentMonth();
   const [received, paid, monthTips, transactions, monthlyRows] = await Promise.all([
-    sumTipsForWorkers(workerIds, successfulTipStatuses),
-    sumPayoutsForWorkers(workerIds, "paid"),
-    sumTipsForWorkers(workerIds, successfulTipStatuses, monthRange(month)),
+    sumTipsForWorkerRows(workers),
+    sumPayoutsForWorkerRows(workers, "paid"),
+    sumTipsForWorkerRows(workers, monthRange(month)),
     companyTransactionRows(company.id, 6),
-    monthlyTipsForCompany(company.id, successfulTipStatuses),
+    monthlyTipsForCompany(company.id, tipStatuses, company.isDemo),
   ]);
   const profile = {
     id: company.id,
@@ -1119,6 +1332,11 @@ router.get("/company/workers", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
+  const company = await getCompanyById(membership.companyId);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
   const rows = await getWorkersByCompany(membership.companyId);
   const values = await Promise.all(
     rows.map(async (worker) => ({
@@ -1131,7 +1349,12 @@ router.get("/company/workers", async (req, res): Promise<void> => {
       role: worker.role,
       branch: worker.branch,
       status: worker.status,
-      totalTipsFils: await sumTipsForWorkers([worker.id], successfulTipStatuses),
+      totalTipsFils: await sumTipsForWorkers(
+        [worker.id],
+        tipStatusesForAccount(worker.isDemo),
+        undefined,
+        worker.isDemo,
+      ),
       isDemo: worker.isDemo,
     })),
   );
@@ -1288,7 +1511,12 @@ router.patch("/company/workers/:workerId", async (req, res): Promise<void> => {
       role: worker.role,
       branch: worker.branch,
       status: worker.status,
-      totalTipsFils: await sumTipsForWorkers([worker.id], successfulTipStatuses),
+      totalTipsFils: await sumTipsForWorkers(
+        [worker.id],
+        tipStatusesForAccount(worker.isDemo),
+        undefined,
+        worker.isDemo,
+      ),
       isDemo: worker.isDemo,
     }),
   );
@@ -1336,8 +1564,18 @@ router.post("/company/payouts", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Worker not found" });
     return;
   }
-  const earned = await sumTipsForWorkers([worker.id], successfulTipStatuses);
-  const existingPayouts = await sumPayoutsForWorkers([worker.id]);
+  const earned = await sumTipsForWorkers(
+    [worker.id],
+    tipStatusesForAccount(worker.isDemo),
+    undefined,
+    worker.isDemo,
+  );
+  const existingPayouts = await sumPayoutsForWorkers(
+    [worker.id],
+    undefined,
+    undefined,
+    worker.isDemo,
+  );
   if (body.data.amountFils > Math.max(0, earned - existingPayouts)) {
     res.status(400).json({ error: "Payout exceeds this worker’s available tip balance" });
     return;
@@ -1432,16 +1670,33 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Company profile not found" });
     return;
   }
+  const company = await getCompanyById(membership.companyId);
+  if (!company) {
+    res.status(404).json({ error: "Company not found" });
+    return;
+  }
   const workers = await getWorkersByCompany(membership.companyId);
   const workerIds = workers.map((worker) => worker.id);
   const range = monthRange(params.data.month);
   const [tipsFils, payouts, transactions] = await Promise.all([
-    sumTipsForWorkers(workerIds, successfulTipStatuses, range),
-    companyPayoutRows(membership.companyId, workerIds).then((rows) =>
-      rows.filter((row) => row.month === params.data.month),
-    ),
+    sumTipsForWorkerRows(workers, range),
+    companyPayoutRows(membership.companyId, workerIds).then((rows) => {
+      const demoWorkerIds = new Set(
+        workers.filter((worker) => worker.isDemo).map((worker) => worker.id),
+      );
+      return rows.filter(
+        (row) =>
+          row.month === params.data.month &&
+          Boolean(row.isDemo) === demoWorkerIds.has(row.workerId),
+      );
+    }),
     companyTransactionRows(membership.companyId).then((rows) =>
-      rows.filter((row) => row.createdAt >= range.from && row.createdAt < range.to),
+      rows.filter(
+        (row) =>
+          row.createdAt >= range.from &&
+          row.createdAt < range.to &&
+          (company.isDemo || row.status === "succeeded"),
+      ),
     ),
   ]);
   const paidOutFils = payouts
@@ -1455,7 +1710,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     paidOutFils,
     workerCount: new Set(transactions.map((transaction) => transaction.workerId)).size,
     transactionCount: transactions.length,
-    isDemo: (await getCompanyById(membership.companyId))?.isDemo ?? false,
+    isDemo: company.isDemo,
   };
   res.json(GetCompanyReportResponse.parse(report));
 });

@@ -21,6 +21,57 @@ export interface PublicWorker {
   branch?: string | null;
   /** @nullable */
   photoUrl?: string | null;
+  isDemo: boolean;
+}
+
+export interface TipSimulationInput {
+  /**
+     * @minLength 1
+     * @maxLength 180
+     */
+  workerSlug: string;
+  /**
+     * @minimum 250
+     * @maximum 100000
+     */
+  amountFils: number;
+  /**
+     * @minimum 1
+     * @maximum 5
+     * @nullable
+     */
+  rating?: number | null;
+  requestId: string;
+}
+
+export type TipSimulationResponseCurrency = typeof TipSimulationResponseCurrency[keyof typeof TipSimulationResponseCurrency];
+
+
+export const TipSimulationResponseCurrency = {
+  KWD: 'KWD',
+} as const;
+
+export type TipSimulationResponseStatus = typeof TipSimulationResponseStatus[keyof typeof TipSimulationResponseStatus];
+
+
+export const TipSimulationResponseStatus = {
+  demo: 'demo',
+} as const;
+
+export interface TipSimulationResponse {
+  tipId: string;
+  workerSlug: string;
+  workerName: string;
+  amountFils: number;
+  currency: TipSimulationResponseCurrency;
+  status: TipSimulationResponseStatus;
+  /**
+     * @minimum 1
+     * @maximum 5
+     * @nullable
+     */
+  rating: number | null;
+  isDemo: true;
 }
 
 export interface TipCheckoutInput {
@@ -28,7 +79,7 @@ export interface TipCheckoutInput {
   workerSlug: string;
   /**
      * @minimum 250
-     * @maximum 1000000
+     * @maximum 100000
      */
   amountFils: number;
   /**
@@ -47,7 +98,7 @@ export interface TipQuoteInput {
   workerSlug: string;
   /**
      * @minimum 250
-     * @maximum 1000000
+     * @maximum 100000
      */
   amountFils: number;
   /**
@@ -375,6 +426,8 @@ export interface WorkerDashboard {
   monthTipsFils: number;
   /** @nullable */
   averageRating: number | null;
+  /** @minimum 0 */
+  ratingCount: number;
   monthly: MonthlyValue[];
   recentTransactions: TipTransaction[];
   isDemo: boolean;

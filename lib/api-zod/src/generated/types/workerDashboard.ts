@@ -17,6 +17,8 @@ export interface WorkerDashboard {
   monthTipsFils: number;
   /** @nullable */
   averageRating: number | null;
+  /** @minimum 0 */
+  ratingCount: number;
   monthly: MonthlyValue[];
   recentTransactions: TipTransaction[];
   isDemo: boolean;

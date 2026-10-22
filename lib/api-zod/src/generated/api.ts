@@ -32,7 +32,8 @@ export const GetPublicWorkerResponse = zod.object({
   "companyName": zod.string(),
   "role": zod.string(),
   "branch": zod.string().nullish(),
-  "photoUrl": zod.string().url().nullish()
+  "photoUrl": zod.string().url().nullish(),
+  "isDemo": zod.boolean()
 })
 
 
@@ -41,7 +42,7 @@ export const GetPublicWorkerResponse = zod.object({
  */
 
 export const createTipQuoteBodyAmountFilsMin = 250;
-export const createTipQuoteBodyAmountFilsMax = 1000000;
+export const createTipQuoteBodyAmountFilsMax = 100000;
 
 export const createTipQuoteBodyRatingMax = 5;
 
@@ -69,11 +70,46 @@ export const CreateTipQuoteResponse = zod.object({
 
 
 /**
+ * @summary Save a clearly labelled simulated tip for a demo worker
+ */
+export const simulateTipBodyWorkerSlugMax = 180;
+
+export const simulateTipBodyAmountFilsMin = 250;
+export const simulateTipBodyAmountFilsMax = 100000;
+
+export const simulateTipBodyRatingMax = 5;
+
+
+
+export const SimulateTipBody = zod.object({
+  "workerSlug": zod.string().min(1).max(simulateTipBodyWorkerSlugMax),
+  "amountFils": zod.number().int().min(simulateTipBodyAmountFilsMin).max(simulateTipBodyAmountFilsMax),
+  "rating": zod.number().int().min(1).max(simulateTipBodyRatingMax).nullish(),
+  "requestId": zod.string().uuid()
+})
+
+export const simulateTipResponseRatingMax = 5;
+
+
+
+export const SimulateTipResponse = zod.object({
+  "tipId": zod.string().uuid(),
+  "workerSlug": zod.string(),
+  "workerName": zod.string(),
+  "amountFils": zod.number().int(),
+  "currency": zod.enum(['KWD']),
+  "status": zod.enum(['demo']),
+  "rating": zod.number().int().min(1).max(simulateTipResponseRatingMax).nullable(),
+  "isDemo": zod.literal(true)
+})
+
+
+/**
  * @summary Start a tip checkout or clearly labelled development demo
  */
 
 export const createTipCheckoutBodyAmountFilsMin = 250;
-export const createTipCheckoutBodyAmountFilsMax = 1000000;
+export const createTipCheckoutBodyAmountFilsMax = 100000;
 
 export const createTipCheckoutBodyRatingMax = 5;
 
@@ -193,6 +229,10 @@ export const WorkerLogoutResponse = zod.object({
 /**
  * @summary Get the signed-in worker's earnings summary
  */
+export const getWorkerDashboardResponseRatingCountMin = 0;
+
+
+
 export const GetWorkerDashboardResponse = zod.object({
   "worker": zod.object({
   "id": zod.string(),
@@ -212,6 +252,7 @@ export const GetWorkerDashboardResponse = zod.object({
   "paidTipsFils": zod.number().int(),
   "monthTipsFils": zod.number().int(),
   "averageRating": zod.number().nullable(),
+  "ratingCount": zod.number().int().min(getWorkerDashboardResponseRatingCountMin),
   "monthly": zod.array(zod.object({
   "month": zod.string(),
   "amountFils": zod.number().int()

@@ -18,4 +18,5 @@ export interface PublicWorker {
   branch?: string | null;
   /** @nullable */
   photoUrl?: string | null;
+  isDemo: boolean;
 }

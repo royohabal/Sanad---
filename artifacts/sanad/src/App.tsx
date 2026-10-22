@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useState, createContext, useContext, Children, cloneElement, isValidElement, type ReactNode, type FormEvent } from 'react';
 import './sanad.css';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ClerkProvider, SignIn, SignUp, Show, useAuth, useClerk } from '@clerk/react';
@@ -12,7 +12,7 @@ import {
   Phone, QrCode, Search, Settings, ShieldCheck, Sparkles, Star, Users, Wallet, X
 } from 'lucide-react';
 import {
-  useGetPublicWorker, getGetPublicWorkerQueryKey, useCreateTipQuote, useCreateTipCheckout, useGetTipStatus,
+  useGetPublicWorker, getGetPublicWorkerQueryKey, useCreateTipQuote, useCreateTipCheckout, useSimulateTip, useGetTipStatus,
   getGetTipStatusQueryKey, useGetWorkerDashboard, getGetWorkerDashboardQueryKey,
   useListWorkerTransactions, getListWorkerTransactionsQueryKey, useListWorkerPayouts,
   getListWorkerPayoutsQueryKey, useGetWorkerBadge, getGetWorkerBadgeQueryKey,
@@ -24,7 +24,8 @@ import {
   useWorkerLogin, useGetWorkerAuthSession, getGetWorkerAuthSessionQueryKey,
   useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword
 } from '@workspace/api-client-react';
-import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse } from '@workspace/api-client-react';
+import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse, TipSimulationResponse } from '@workspace/api-client-react';
+import { MAX_TIP_AMOUNT_FILS, MIN_TIP_AMOUNT_FILS, parseKwdAmount } from './lib/tipAmount';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -77,6 +78,30 @@ const kuwaitMonth = () => {
   return `${parts.find((part) => part.type === 'year')?.value ?? '1970'}-${parts.find((part) => part.type === 'month')?.value ?? '01'}`;
 };
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+function getSessionValue(key: string) {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function setSessionValue(key: string, value: string) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Tip IDs remain in the URL for checkout confirmation when storage is unavailable.
+  }
+}
+function removeSessionValue(key: string) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // Storage is optional; the next interaction can start with a fresh request ID.
+  }
+}
 function isHttpStatus(error: unknown, status: number) {
   return typeof error === 'object' && error !== null && 'status' in error && (error as { status?: unknown }).status === status;
 }
@@ -192,7 +217,7 @@ const arabicCopy: Record<string, string> = {
   'Give this temporary password to the worker directly. It is shown only once.':'سلّم كلمة المرور المؤقتة للموظف مباشرةً. ستظهر مرة واحدة فقط.',
   'The worker signs in with their phone number and changes this password at first sign-in.':'يسجّل الموظف الدخول برقم هاتفه ويغيّر كلمة المرور عند أول دخول.',
   'Couldn’t add this worker. Check the phone number and try again.':'تعذرت إضافة الموظف. تحقق من رقم الهاتف وحاول مجدداً.',
-  'Barista':'باريستا','Salmiya':'السالمية',
+  'Barista':'باريستا','Service host':'موظف خدمة','Salmiya':'السالمية',
   'No team members found':'لم يتم العثور على أعضاء الفريق','Try another name or add your first worker.':'جرّب اسماً آخر أو أضف أول موظف.',
   'Adding worker…':'جارٍ إضافة الموظف…','Could not add this worker. Please check the details.':'تعذرت إضافة الموظف. تحقق من البيانات.',
   'Find a worker':'ابحث عن موظف','TEAM DIRECTORY':'دليل الفريق',
@@ -233,7 +258,10 @@ const arabicCopy: Record<string, string> = {
   'We’re waiting for a confirmed payment status. This page will update automatically.':'بانتظار تأكيد حالة الدفع. ستتحدث هذه الصفحة تلقائياً.',
   'No charge was confirmed. You can safely try again.':'لم يتم تأكيد أي خصم. يمكنك المحاولة مجدداً بأمان.',
   'TIP STATUS':'حالة الإكرامية','THANK YOU SENT':'تم إرسال الشكر','DEVELOPMENT DEMO':'عرض تجريبي للتطوير',
-  'Recipient':'المستلم','Back to SANAD':'العودة إلى سند','Return to SANAD':'العودة إلى سند',
+  'Recipient':'المستلم','Worker tip':'إكرامية الموظف','Stripe checkout':'دفع Stripe',
+  'STRIPE TEST CHECKOUT':'دفع Stripe التجريبي','SANAD worker':'موظف سند',
+  'DEMO — this status does not represent a real charge.':'عرض تجريبي — هذه الحالة لا تمثل عملية دفع حقيقية.',
+  'Back to SANAD':'العودة إلى سند','Return to SANAD':'العودة إلى سند',
   'We couldn’t verify the payment status.':'تعذر التحقق من حالة الدفع.','Check again':'تحقق مجدداً',
 };
 function localized(text: string, language: Language) {
@@ -259,12 +287,18 @@ function translateTree(children: ReactNode, language: Language): ReactNode {
 }
 function LocalizedTree({ children }: { children: ReactNode }) {
   const { language } = useLanguage();
-  return <>{language === 'ar' ? translateTree(children, language) : children}</>;
+  if (language !== 'ar') return <>{children}</>;
+  try {
+    return <>{translateTree(children, language)}</>;
+  } catch {
+    // A translation traversal issue must not blank an otherwise usable page.
+    return <>{children}</>;
+  }
 }
 
 function LanguageToggle() {
   const { language, toggle } = useLanguage();
-  return <button data-testid="button-language" className="language-toggle" onClick={toggle} aria-label="Switch language"><Globe2 size={15}/><span>{language === 'en' ? 'العربية' : 'English'}</span></button>;
+  return <button data-testid="button-language" className="language-toggle" onClick={toggle} aria-label={language === 'en' ? 'Switch to Arabic' : 'التبديل إلى الإنجليزية'}><Globe2 size={15}/><span>{language === 'en' ? 'العربية' : 'English'}</span></button>;
 }
 function Brand({ light = false }: { light?: boolean }) {
   return <Link href="/" className={`brand ${light ? 'brand-light' : ''}`} data-testid="link-brand"><span className="brand-mark"><Handshake aria-hidden="true" strokeWidth={2.1}/></span><span>SANAD<span className="brand-dot">.</span></span></Link>;
@@ -306,45 +340,37 @@ function Metric({ label, value, caption, icon: Icon, accent = false }: { label: 
 }
 function Header() {
   const { language } = useLanguage();
-  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#tip-now" data-testid="link-nav-guests">{language === 'ar' ? 'للضيوف' : 'For guests'}</a><a href="#for-business" data-testid="link-nav-business">{language === 'ar' ? 'للشركات' : 'For business'}</a></nav><div className="header-actions"><LanguageToggle/><Link className="header-worker-signin" href="/worker/sign-in" aria-label={language === 'ar' ? 'تسجيل دخول العامل' : 'Worker sign in'} data-testid="link-sign-in"><LogIn size={14}/><span className="worker-signin-full">{language === 'ar' ? 'تسجيل دخول العامل' : 'Worker sign in'}</span><span className="worker-signin-compact">{language === 'ar' ? 'العامل' : 'Worker'}</span></Link><Link className="header-signup" href="/sign-up" data-testid="link-get-started">{language === 'ar' ? 'ابدأ الآن' : 'Get started'} <ArrowUpRight size={15}/></Link></div></header>;
+  return <header className="site-header"><Brand/><nav className="public-nav"><a href="#how-it-works" data-testid="link-nav-how">{language === 'ar' ? 'كيف يعمل' : 'How it works'}</a><Link href="/worker/sign-in" data-testid="link-nav-workers">{language === 'ar' ? 'للموظفين' : 'For workers'}</Link><Link href="/sign-up" data-testid="link-nav-business">{language === 'ar' ? 'للشركات' : 'For companies'}</Link></nav><div className="header-actions"><LanguageToggle/><Link className="header-worker-signin" href="/worker/sign-in" aria-label={language === 'ar' ? 'تسجيل دخول الموظف' : 'Worker sign in'} data-testid="link-sign-in"><LogIn size={14}/><span className="worker-signin-full">{language === 'ar' ? 'دخول الموظف' : 'Worker sign in'}</span><span className="worker-signin-compact">{language === 'ar' ? 'موظف' : 'Worker'}</span></Link><Link className="header-signup" href="/sign-up" data-testid="link-get-started">{language === 'ar' ? 'ابدأ الآن' : 'Get started'} <ArrowUpRight size={15}/></Link></div></header>;
 }
 function Landing() {
   const { language } = useLanguage();
   const ar = language === 'ar';
   const publicDemo = import.meta.env.PROD;
   const publicTestCheckout = publicDemo && stripeTestCheckoutEnabled;
-  const previousLanguage = useRef(language);
   const [demoAmount, setDemoAmount] = useState(1);
   const [demoRating, setDemoRating] = useState<number | null>(null);
   const [demoComplete, setDemoComplete] = useState(false);
-  const [languageSwitching, setLanguageSwitching] = useState(false);
-  useLayoutEffect(() => {
-    if (previousLanguage.current === language) return;
-    previousLanguage.current = language;
-    setLanguageSwitching(true);
-    const timeout = window.setTimeout(() => setLanguageSwitching(false), 220);
-    return () => window.clearTimeout(timeout);
-  }, [language]);
   const demoAmounts = ['0.500', '1.000', '2.000'];
-  return <LocalizedTree><main className={`landing ${languageSwitching ? 'language-switching' : ''}`}>
+  return <LocalizedTree><main className="landing">
     <Header/>
     <section className="hero-wrap landing-compact">
       <div className="hero-copy landing-hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> {ar ? 'الكويت · إكراميات رقمية' : 'KUWAIT · DIGITAL TIPPING'}</div>
         <h1>{ar ? <>شكراً،<br/><em>بطريقة أسهل.</em></> : <>A simple way<br/>to say <em>thank you.</em></>}</h1>
-        <div className="hero-actions"><Link href="/tip/ahmed-almutairi" className="cta-primary" data-testid="link-tip-now">{ar ? 'أرسل إكرامية' : 'Tip Now'} <ArrowUpRight size={17}/></Link><Link href="/sign-up" className="cta-quiet" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For companies'} <ChevronRight size={16}/></Link></div>
-        <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? publicTestCheckout ? (ar ? 'وضع Stripe التجريبي · لا توجد رسوم حقيقية' : 'Stripe test mode · no real charge') : (ar ? 'عرض عام · الدفع معطل' : 'Public demo · checkout disabled') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
+        <p>{ar ? 'منصة بسيطة للشركات والموظفين لإدارة رموز الإكراميات الشخصية.' : 'A simple way for companies and workers to manage personal tipping badges.'}</p>
+        <div className="hero-actions"><Link href="/sign-up" className="cta-primary" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For Companies'} <ArrowUpRight size={17}/></Link><Link href="/worker/sign-in" className="cta-quiet" data-testid="link-worker-signin-hero">{ar ? 'للموظفين' : 'For Workers'} <ChevronRight size={16}/></Link></div>
+        <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? publicTestCheckout ? (ar ? 'وضع Stripe التجريبي · لا توجد رسوم حقيقية' : 'Stripe test mode · no real charge') : (ar ? 'عرض عام · جرّب محاكاة إكرامية' : 'Public demo · try a simulated tip') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
       </div>
       <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark"><Handshake className="landing-handshake" strokeWidth={1.45}/></div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
     </section>
-    <section className="how-section landing-reveal" aria-labelledby="how-title">
+    <section id="how-it-works" className="how-section landing-reveal" aria-labelledby="how-title">
       <div className="how-heading"><span className="eyebrow">{ar ? 'بكل بساطة' : 'THOUGHTFULLY SIMPLE'}</span><h2 id="how-title">{ar ? 'ثلاث خطوات، وشكر يصل.' : 'Three steps. A thank you delivered.'}</h2></div>
       <div className="how-steps">
-        <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>01</small><h3>{ar ? 'امسح الرمز' : 'Scan the badge'}</h3><p>{ar ? 'امسح رمز الموظف لفتح صفحة سند الخاصة به.' : 'Scan the worker’s QR badge to open their SANAD page.'}</p></article>
-        <article className="how-step"><span className="how-icon"><Banknote size={21}/></span><small>02</small><h3>{ar ? 'اختر إكراميتك' : 'Choose your tip'}</h3><p>{ar ? 'اختر المبلغ وأضف تقييماً إن رغبت.' : 'Pick an amount and leave a rating if you like.'}</p></article>
-         <article className="how-step"><span className="how-icon"><ShieldCheck size={21}/></span><small>03</small><h3>{publicDemo ? publicTestCheckout ? (ar ? 'دفع Stripe تجريبي' : 'Stripe test checkout') : (ar ? 'معاينة فقط' : 'Preview only') : (ar ? 'ادفع بأمان' : 'Check out securely')}</h3><p>{publicDemo ? publicTestCheckout ? (ar ? 'استخدم بطاقة تجريبية؛ لن يتم خصم أي مبلغ حقيقي.' : 'Use a test card. No real charge will be made.') : (ar ? 'الدفع معطل في العرض العام.' : 'Checkout is disabled in this public demo.') : (ar ? 'أكمل الدفع الآمن دون إنشاء حساب.' : 'Complete secure checkout. No account needed.')}</p></article>
+        <article className="how-step"><span className="how-icon"><Users size={21}/></span><small>01</small><h3>{ar ? 'أضف الموظفين' : 'Company adds workers'}</h3><p>{ar ? 'تضيف الشركة فريقها إلى سند.' : 'The company adds its team to SANAD.'}</p></article>
+        <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>02</small><h3>{ar ? 'استلم رمزك' : 'Worker gets a QR'}</h3><p>{ar ? 'يحصل كل موظف على رمز QR شخصي.' : 'Each worker gets a personal QR badge.'}</p></article>
+         <article className="how-step"><span className="how-icon"><Heart size={21}/></span><small>03</small><h3>{ar ? 'امسح وأرسل إكرامية' : 'Guest scans and tips'}</h3><p>{ar ? 'يمسح الضيف الرمز ويرسل إكرامية للموظف.' : 'A guest scans the code and sends the worker a tip.'}</p></article>
       </div>
     </section>
-     <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'معاينة فقط. الدفع غير متاح في الموقع المنشور.' : 'Preview only. Checkout is disabled on the published demo.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
+     <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'جرّب محاكاة إكرامية محفوظة. لا يتم إجراء دفع أو تحويل مبلغ حقيقي.' : 'Try a saved tip simulation. No payment or real payout is made.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
       <div className="tip-demo" aria-live="polite">
         <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span><strong>{ar ? 'جرّب إرسال الشكر' : 'Try a little thank you'}</strong></div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
         {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
@@ -356,12 +382,12 @@ function Landing() {
       </div>
     </section>
     <section id="for-business" className="business-section landing-business landing-reveal"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? <>تقدير أوضح،<br/>لفريقك.</> : <>A clearer way<br/>to value <em>your team.</em></>}</h2><ul><li><BadgeCheck/>{ar ? 'رموز QR شخصية لكل موظف' : 'Personal QR badges for every worker'}</li><li><BadgeCheck/>{ar ? 'سجلات واضحة للإكراميات والرواتب' : 'Clear tip and payroll records'}</li></ul><Link href="/sign-up" className="business-link" data-testid="link-company-signup">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div>
-      <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'الموظف رقم ١' : 'Worker No. 1'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">W1</span><span><b>{ar ? 'الموظف رقم ١' : 'Worker No. 1'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
+       <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'أحمد' : 'Ahmed'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">AH</span><span><b>{ar ? 'أحمد' : 'Ahmed'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
     </section>
     <Footer/>
   </main></LocalizedTree>;
 }
-function Footer() { return <footer className="footer"><Brand/><span>Made with care in Kuwait.</span><div><Link href="/worker/sign-in">Worker sign in</Link><Link href="/sign-up">For companies</Link><span>© SANAD</span></div></footer>; }
+function Footer() { const { language } = useLanguage(); const ar = language === 'ar'; return <footer className="footer"><Brand/><span>{ar ? 'صُنع بعناية في الكويت.' : 'Made with care in Kuwait.'}</span><div><Link href="/worker/sign-in">{ar ? 'دخول الموظف' : 'Worker sign in'}</Link><Link href="/sign-up">{ar ? 'للشركات' : 'For companies'}</Link><span>© SANAD</span></div></footer>; }
 function QrGraphic() {
   return <div className="qr-graphic" aria-label="Decorative QR pattern"><div className="qr-corner"/><div className="qr-corner"/><div className="qr-corner"/>{Array.from({length:25}).map((_,i)=><i key={i} className={((i*7+3)%5===0 || (i*13)%7<2)?'qr-dark':''}/>)}</div>;
 }
@@ -373,44 +399,39 @@ function TipPage() {
   const ar = language === 'ar';
   const checkoutEnabled = stripeTestCheckoutEnabled;
   const publicTestCheckout = import.meta.env.PROD && checkoutEnabled;
-  const publishedDemoWorker = import.meta.env.PROD && slug === 'ahmed-almutairi'
-    ? {
-        id: '00000000-0000-4000-8000-000000000001',
-        slug,
-        name: 'Worker No. 1',
-        arabicName: 'الموظف رقم ١',
-        companyName: 'SANAD Demo',
-        role: 'Service host',
-        branch: 'Salmiya',
-        photoUrl: null,
-      }
-    : undefined;
-  const workerQuery = useGetPublicWorker(slug, { query: { enabled: !!slug && !publishedDemoWorker, queryKey: getGetPublicWorkerQueryKey(slug) } });
-  const worker = workerQuery.data ?? publishedDemoWorker;
-  const isLoading = !publishedDemoWorker && workerQuery.isLoading;
-  const isError = !publishedDemoWorker && workerQuery.isError;
+  const workerQuery = useGetPublicWorker(slug, { query: { enabled: !!slug, queryKey: getGetPublicWorkerQueryKey(slug) } });
+  const worker = workerQuery.data;
+  const isLoading = workerQuery.isLoading;
+  const isError = workerQuery.isError;
   const refetch = workerQuery.refetch;
   const quoteMutation = useCreateTipQuote();
   const checkout = useCreateTipCheckout();
-  const [amount, setAmount] = useState(2000);
+  const simulateTip = useSimulateTip();
+  const [amount, setAmount] = useState<number | null>(null);
   const [custom, setCustom] = useState('');
   const [rating, setRating] = useState<number | null>(null);
   const [quote, setQuote] = useState<TipQuote | null>(null);
   const [quoteRating, setQuoteRating] = useState<number | null>(null);
   const [preparedCheckout, setPreparedCheckout] = useState<TipCheckoutResponse | null>(null);
-  const [notice, setNotice] = useState(() => new URLSearchParams(window.location.search).get('checkout') === 'cancelled' ? (ar ? 'تم إلغاء الدفع. لم يتم تأكيد أي مبلغ.' : 'Checkout was cancelled. No payment was confirmed.') : '');
+  const [simulationResult, setSimulationResult] = useState<TipSimulationResponse | null>(null);
+  const [notice, setNotice] = useState<{ en: string; ar: string } | null>(() =>
+    new URLSearchParams(window.location.search).get('checkout') === 'cancelled'
+      ? { en: 'Checkout was cancelled. No payment was confirmed.', ar: 'تم إلغاء الدفع. لم يتم تأكيد أي مبلغ.' }
+      : null,
+  );
+  const showNotice = (en: string, arabic: string) => setNotice({ en, ar: arabic });
   const [, setLocation] = useLocation();
-  const amountFils = custom ? Math.round(Number(custom) * 1000) : amount;
+  const amountFils = custom ? parseKwdAmount(custom) : amount;
   const clearReview = () => {
     setQuote(null);
     setQuoteRating(null);
     setPreparedCheckout(null);
-    setNotice('');
+    setNotice(null);
   };
   const requestId = () => {
     const key = 'sanad-tip-request';
     try {
-      const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null') as {
+      const saved = JSON.parse(getSessionValue(key) ?? 'null') as {
         id?: string; slug?: string; amountFils?: number; rating?: number | null; createdAt?: number;
       } | null;
       if (
@@ -422,11 +443,77 @@ function TipPage() {
         Date.now() - saved.createdAt < 24 * 60 * 60 * 1000
       ) return saved.id;
     } catch {
-      sessionStorage.removeItem(key);
+      removeSessionValue(key);
     }
     const id = window.crypto.randomUUID();
-    sessionStorage.setItem(key, JSON.stringify({ id, slug, amountFils, rating, createdAt: Date.now() }));
+    setSessionValue(key, JSON.stringify({ id, slug, amountFils, rating, createdAt: Date.now() }));
     return id;
+  };
+  const simulationRequestId = () => {
+    const key = 'sanad-simulation-request';
+    try {
+      const saved = JSON.parse(getSessionValue(key) ?? 'null') as {
+        id?: string; slug?: string; amountFils?: number; rating?: number | null; createdAt?: number;
+      } | null;
+      if (
+        saved?.id &&
+        saved.slug === slug &&
+        saved.amountFils === amountFils &&
+        (saved.rating ?? null) === rating &&
+        typeof saved.createdAt === 'number' &&
+        Date.now() - saved.createdAt < 24 * 60 * 60 * 1000
+      ) return saved.id;
+    } catch {
+      // Storage can be unavailable in private browsing; the in-flight button still prevents duplicate taps.
+    }
+    const id = window.crypto.randomUUID();
+    try {
+      setSessionValue(key, JSON.stringify({ id, slug, amountFils, rating, createdAt: Date.now() }));
+    } catch {
+      // The API still validates and stores this one request.
+    }
+    return id;
+  };
+  const submitSimulation = () => {
+    setNotice(null);
+    if (!worker?.isDemo) {
+      showNotice('Simulation is available only on demo worker pages.', 'المحاكاة متاحة لصفحات العرض التجريبي فقط.');
+      return;
+    }
+    if (amountFils === null || !Number.isSafeInteger(amountFils)) {
+      showNotice('Enter an amount with up to three decimal places.', 'أدخل مبلغاً لا يتجاوز ثلاث خانات عشرية.');
+      return;
+    }
+    if (amountFils < MIN_TIP_AMOUNT_FILS) {
+      showNotice('The minimum tip is KWD 0.250.', 'الحد الأدنى للإكرامية هو KWD 0.250.');
+      return;
+    }
+    if (amountFils > MAX_TIP_AMOUNT_FILS) {
+      showNotice('The maximum tip is KWD 100.000.', 'الحد الأقصى للإكرامية هو KWD 100.000.');
+      return;
+    }
+    simulateTip.mutate({
+      data: { workerSlug: slug, amountFils, rating, requestId: simulationRequestId() },
+    }, {
+      onSuccess: (result) => {
+        setSimulationResult(result);
+        setQuote(null);
+        setPreparedCheckout(null);
+      },
+      onError: (error) => {
+        if (isHttpStatus(error, 400)) {
+          showNotice('Check the amount and rating, then try again.', 'تحقق من المبلغ والتقييم ثم حاول مرة أخرى.');
+        } else if (isHttpStatus(error, 404)) {
+          showNotice('Simulation is available only on demo worker pages.', 'المحاكاة متاحة لصفحات العرض التجريبي فقط.');
+        } else if (isHttpStatus(error, 409)) {
+          showNotice('This simulation request conflicts with an earlier one. Change the amount or try again.', 'تعذر إتمام المحاكاة بهذا الطلب. غيّر المبلغ أو أعد المحاولة.');
+        } else if (isHttpStatus(error, 429)) {
+          showNotice('Too many simulations. Please wait a little and try again.', 'تم تجاوز عدد المحاولات. انتظر قليلاً ثم حاول مرة أخرى.');
+        } else {
+          showNotice('We couldn’t save the simulated tip. No payment was made. Please try again.', 'تعذر حفظ الإكرامية التجريبية. لم يتم الدفع. حاول مرة أخرى.');
+        }
+      },
+    });
   };
   const continueToCheckout = () => {
     if (!checkoutEnabled) return;
@@ -446,13 +533,13 @@ function TipPage() {
       },
     }, {
       onSuccess: (result) => {
-        sessionStorage.setItem('sanad-tip-id', result.tipId);
-        sessionStorage.setItem('sanad-tip-mode', result.paymentMode);
-        sessionStorage.setItem('sanad-tip-worker', worker?.name ?? '');
         try {
-          const saved = JSON.parse(sessionStorage.getItem('sanad-tip-request') ?? 'null');
-          if (saved?.id) sessionStorage.setItem('sanad-tip-request', JSON.stringify({ ...saved, tipId: result.tipId }));
-        } catch { /* A fresh request ID will be generated after this checkout. */ }
+          setSessionValue('sanad-tip-id', result.tipId);
+          setSessionValue('sanad-tip-mode', result.paymentMode);
+          setSessionValue('sanad-tip-worker', worker?.name ?? '');
+          const saved = JSON.parse(getSessionValue('sanad-tip-request') ?? 'null');
+          if (saved?.id) setSessionValue('sanad-tip-request', JSON.stringify({ ...saved, tipId: result.tipId }));
+        } catch { /* Checkout continues even if the browser blocks storage. */ }
         if (result.checkoutUrl) {
           const sameReview =
             result.amountFils === quote.amountFils &&
@@ -461,9 +548,10 @@ function TipPage() {
           if (sameReview) window.location.assign(result.checkoutUrl);
           else {
             setPreparedCheckout(result);
-            setNotice(ar
-              ? 'تم تجهيز الدفع بالمبلغ المحفوظ أدناه. راجعه ثم تابع.'
-              : 'This checkout uses the saved conversion shown below. Review it, then continue.');
+            showNotice(
+              'This checkout uses the saved conversion shown below. Review it, then continue.',
+              'تم تجهيز الدفع بالمبلغ المحفوظ أدناه. راجعه ثم تابع.',
+            );
           }
         } else {
           setLocation(`/tip-confirmation?tipId=${encodeURIComponent(result.tipId)}`);
@@ -472,33 +560,45 @@ function TipPage() {
       onError: (error) => {
         if (isHttpStatus(error, 409)) {
           setQuote(null);
-          setNotice(ar ? 'انتهت صلاحية سعر التحويل. راجع المبلغ مرة أخرى.' : 'This exchange quote expired. Please review the amount again.');
+          showNotice('This exchange quote expired. Please review the amount again.', 'انتهت صلاحية سعر التحويل. راجع المبلغ مرة أخرى.');
         } else {
-          setNotice(isHttpStatus(error, 503)
-            ? (ar ? 'الدفع التجريبي غير متاح حالياً. لم يتم الدفع.' : 'Test checkout is unavailable. No payment was made.')
-            : isHttpStatus(error, 502)
-              ? (ar ? 'خدمة التحويل أو الدفع غير متاحة. لم يتم الدفع.' : 'Currency conversion or checkout is unavailable. No payment was made.')
-              : (ar ? 'تعذر بدء الدفع. حاول مرة أخرى.' : 'We couldn’t start checkout. Please try again.'));
+          if (isHttpStatus(error, 503)) {
+            showNotice('Test checkout is unavailable. No payment was made.', 'الدفع التجريبي غير متاح حالياً. لم يتم الدفع.');
+          } else if (isHttpStatus(error, 502)) {
+            showNotice('Currency conversion or checkout is unavailable. No payment was made.', 'خدمة التحويل أو الدفع غير متاحة. لم يتم الدفع.');
+          } else {
+            showNotice('We couldn’t start checkout. Please try again.', 'تعذر بدء الدفع. حاول مرة أخرى.');
+          }
         }
       },
     });
   };
   const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setNotice('');
+    event.preventDefault(); setNotice(null);
     if (!checkoutEnabled) {
-      setNotice(ar ? 'الدفع معطل في هذا العرض العام. لم يتم حفظ أي إكرامية.' : 'Checkout is disabled in this public demo. No tip was saved.');
+      showNotice('Checkout is disabled in this public demo. No tip was saved.', 'الدفع معطل في هذا العرض العام. لم يتم حفظ أي إكرامية.');
       return;
     }
     if (preparedCheckout) { continueToCheckout(); return; }
     if (hasCurrentQuote) { continueToCheckout(); return; }
-    if (!Number.isFinite(amountFils) || amountFils < 250) { setNotice(ar ? 'أدخل مبلغاً لا يقل عن KWD 0.250.' : 'Please enter at least KWD 0.250.'); return; }
+    if (amountFils === null || !Number.isSafeInteger(amountFils) || amountFils < MIN_TIP_AMOUNT_FILS || amountFils > MAX_TIP_AMOUNT_FILS) {
+      showNotice(
+        'Choose an amount from KWD 0.250 to KWD 100.000, with no more than three decimal places.',
+        'اختر مبلغاً من KWD 0.250 إلى KWD 100.000، وبحد أقصى ثلاث خانات عشرية.',
+      );
+      return;
+    }
     quoteMutation.mutate({ data: { workerSlug: slug, amountFils, rating } }, {
       onSuccess: (result) => { setQuote(result); setQuoteRating(rating); },
-      onError: (error) => setNotice(isHttpStatus(error, 503)
-        ? (ar ? 'خدمة التحويل غير مُهيأة. لم يتم الدفع.' : 'Currency conversion is not configured. No payment was made.')
-        : isHttpStatus(error, 502)
-          ? (ar ? 'سعر التحويل غير متاح. لم يتم الدفع.' : 'The exchange rate is unavailable. No payment was made.')
-          : (ar ? 'تعذر إعداد المبلغ. حاول مرة أخرى.' : 'We couldn’t prepare the amount. Please try again.')),
+      onError: (error) => {
+        if (isHttpStatus(error, 503)) {
+          showNotice('Currency conversion is not configured. No payment was made.', 'خدمة التحويل غير مُهيأة. لم يتم الدفع.');
+        } else if (isHttpStatus(error, 502)) {
+          showNotice('The exchange rate is unavailable. No payment was made.', 'سعر التحويل غير متاح. لم يتم الدفع.');
+        } else {
+          showNotice('We couldn’t prepare the amount. Please try again.', 'تعذر إعداد المبلغ. حاول مرة أخرى.');
+        }
+      },
     });
   };
   const displayedAmount = preparedCheckout?.amountFils ?? quote?.amountFils;
@@ -508,35 +608,48 @@ function TipPage() {
   const displayedRateUpdatedAt = preparedCheckout?.rateUpdatedAt ?? quote?.rateUpdatedAt;
   const hasCurrentQuote =
     !!quote &&
+    amountFils !== null &&
     quote.amountFils === amountFils &&
     quote.workerSlug === slug &&
     quoteRating === rating;
   return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><div className="tip-card rise">
     {isLoading ? <Skeleton rows={4}/> : isError || !worker ? <ErrorPanel retry={() => { void refetch(); }}/> : <>
-      <div className="tip-profile"><Avatar name={worker.name} photo={worker.photoUrl} size="lg"/><span className="tip-brandline">{worker.companyName}</span><h1>{worker.name}</h1>{worker.arabicName && <span className="arabic tip-arabic" dir="rtl">{worker.arabicName}</span>}<p>{worker.role}{worker.branch ? ` · ${worker.branch}` : ''}</p></div>
-      <form onSubmit={submit} className="tip-form">
-        <label className="form-label">{ar ? 'مبلغ البقشيش' : 'Tip amount'} <small>KWD</small></label>
-         <div className="amount-options">{[250,500,1000,2000].map((n)=><button disabled={!checkoutEnabled || quoteMutation.isPending} data-testid={`button-amount-${n}`} type="button" onClick={()=>{setAmount(n);setCustom('');clearReview()}} className={`amount-option ${!custom&&amount===n?'chosen':''}`} key={n}>KWD {(n/1000).toFixed(3)}</button>)}</div>
-         <label className="custom-amount"><span>{ar ? 'مبلغ مخصص' : 'Custom amount'}</span><div><span>KWD</span><input disabled={!checkoutEnabled || quoteMutation.isPending} data-testid="input-custom-amount" aria-label={ar ? 'مبلغ مخصص بالدينار الكويتي' : 'Custom amount in KWD'} type="number" min="0.250" max="1000" step="0.001" placeholder="0.000" value={custom} onChange={(e)=>{setCustom(e.target.value);clearReview()}}/></div></label>
-         <div className="rating-row"><div><strong>{ar ? 'التقييم (اختياري)' : 'Rating (optional)'}</strong></div><div className="rating-stars">{[1,2,3,4,5].map((n)=><button disabled={!checkoutEnabled || quoteMutation.isPending} data-testid={`button-rating-${n}`} aria-label={`${n} stars`} aria-pressed={n<= (rating ?? 0)} type="button" onClick={()=>{setRating(rating===n?null:n);clearReview()}} key={n}><Star size={20} fill={n<=(rating ?? 0)?'currentColor':'none'}/></button>)}</div></div>
+      <div className="tip-profile"><Avatar name={ar && worker.arabicName ? worker.arabicName : worker.name} photo={worker.photoUrl} size="lg"/><span className="tip-brandline">{worker.companyName}</span><h1>{firstName(ar && worker.arabicName ? worker.arabicName : worker.name)}</h1>{ar && worker.arabicName && <span className="arabic tip-arabic" dir="rtl">{worker.name}</span>}<p>{localized(worker.role, language)}{worker.branch ? ` · ${localized(worker.branch, language)}` : ''}</p><p className="tip-beneficiary">{ar ? <>إكراميتك مخصصة لـ {firstName(worker.arabicName || worker.name)}. يسجل صاحب العمل المدفوعات، وقد تُطبق رسوم معالجة.</> : <>Your tip is intended for {firstName(worker.name)}. The employer records payouts separately; processing fees may apply.</>}</p></div>
+      {simulationResult ? <section className="simulation-success" role="status" aria-live="polite">
+        <span className="simulation-success-icon"><Check size={23}/></span>
+        <span className="eyebrow">{ar ? 'إكرامية تجريبية' : 'SIMULATED TIP'}</span>
+        <h2>{ar ? `شكراً لك يا ${firstName(worker.arabicName || worker.name)}!` : `Thank you, ${firstName(worker.name)}!`}</h2>
+        <p>{ar ? 'تم حفظ الإكرامية التجريبية. لم يتم إجراء أي دفع أو تحويل مبلغ حقيقي.' : 'Your simulated tip was saved. No payment was made and no real payout occurred.'}</p>
+        <div className="simulation-details"><span>{ar ? 'المبلغ' : 'Simulated amount'}</span><strong>{money(simulationResult.amountFils)}</strong>{simulationResult.rating != null && <><span>{ar ? 'التقييم' : 'Rating'}</span><strong>{simulationResult.rating} / 5</strong></>}</div>
+        <PillButton className="submit-tip" onClick={() => { setSimulationResult(null); setAmount(null); setCustom(''); setRating(null); clearReview(); removeSessionValue('sanad-simulation-request'); }}>{ar ? 'جرّب مرة أخرى' : 'Try another simulated tip'}</PillButton>
+      </section> : <form onSubmit={submit} className="tip-form">
+        <label className="form-label">{ar ? 'مبلغ الإكرامية' : 'Tip amount'} <small>KWD</small></label>
+        <div className="amount-options" role="group" aria-label={ar ? 'اختر مبلغ الإكرامية' : 'Choose a tip amount'}>{[250,500,1000,2000].map((n)=><button disabled={quoteMutation.isPending || simulateTip.isPending} data-testid={`button-amount-${n}`} type="button" onClick={()=>{setAmount(n);setCustom('');clearReview()}} className={`amount-option ${!custom&&amount===n?'chosen':''}`} key={n}>KWD {(n/1000).toFixed(3)}</button>)}</div>
+        <label className="custom-amount"><span>{ar ? 'مبلغ مخصص · الحد الأقصى KWD 100.000' : 'Custom amount · maximum KWD 100.000'}</span><div><span>KWD</span><input disabled={quoteMutation.isPending || simulateTip.isPending} data-testid="input-custom-amount" aria-label={ar ? 'مبلغ مخصص بالدينار الكويتي' : 'Custom amount in KWD'} type="text" inputMode="decimal" maxLength={7} placeholder="0.000" value={custom} onChange={(e)=>{setCustom(e.target.value);setAmount(null);clearReview()}}/></div></label>
+        <div className="rating-row"><div><strong>{ar ? 'التقييم (اختياري)' : 'Rating (optional)'}</strong></div><div className="rating-stars" role="group" aria-label={ar ? 'اختر تقييماً' : 'Choose a rating'}>{[1,2,3,4,5].map((n)=><button disabled={quoteMutation.isPending || simulateTip.isPending} data-testid={`button-rating-${n}`} aria-label={`${n} ${ar ? 'نجوم' : n === 1 ? 'star' : 'stars'}`} aria-pressed={n<= (rating ?? 0)} type="button" onClick={()=>{setRating(rating===n?null:n);clearReview()}} key={n}><Star size={20} fill={n<=(rating ?? 0)?'currentColor':'none'}/></button>)}</div></div>
         {displayedAmount !== undefined && displayedUsdCents !== undefined && displayedRate && displayedRateSource && displayedRateUpdatedAt && <section className="conversion-review" aria-live="polite">
-          <div className="conversion-row"><span>{ar ? 'بقشيش العامل' : 'Worker tip'}</span><strong>{money(displayedAmount)}</strong></div>
+          <div className="conversion-row"><span>{ar ? 'الإكرامية للموظف' : 'Tip for worker'}</span><strong>{money(displayedAmount)}</strong></div>
           <div className="conversion-row conversion-pay"><span>{ar ? 'المبلغ عند الدفع' : 'Amount at Stripe'}</span><strong>{usdMoney(displayedUsdCents)}</strong></div>
           <p>1 KWD = ${Number(displayedRate).toFixed(6)} USD</p>
           <small>{ar ? 'سعر التحويل حسب' : 'Rate by'} <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">{displayedRateSource}</a> · {new Date(displayedRateUpdatedAt).toLocaleDateString(ar ? 'ar-KW' : 'en-KW')}</small>
         </section>}
-         {checkoutEnabled ? <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع تجريبي آمن عبر Stripe · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div> : <div className="demo-callout" role="status">{ar ? 'عرض عام فقط · الدفع معطل. لا يتم حفظ الإكراميات.' : 'Public demo only · checkout is disabled. Tips are not saved.'}</div>}
-        {notice && <div className="form-notice" role="alert">{notice}</div>}
-          <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending}>{!checkoutEnabled ? (ar ? 'الدفع معطل في العرض العام' : 'Checkout disabled in public demo') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>
-      </form>
+        {worker.isDemo && <div className="demo-callout" role="status">{ar ? 'محاكاة فقط · تُحفظ كبيانات تجريبية ولا يتم الدفع أو تحويل أموال حقيقية.' : 'Simulation only · saved as demo data; no payment or real payout occurs.'}</div>}
+        {checkoutEnabled && <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع Stripe تجريبي آمن · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div>}
+        {!checkoutEnabled && !worker.isDemo && <div className="demo-callout" role="status">{ar ? 'الدفع غير متاح في هذا العرض العام. لم يتم حفظ أي إكرامية.' : 'Checkout is unavailable in this public demo. No tip was saved.'}</div>}
+        {notice && <div className="form-notice" role="alert">{notice[language]}</div>}
+        <div className="tip-actions">
+          <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending || simulateTip.isPending}>{!checkoutEnabled ? (ar ? 'الدفع غير متاح' : 'Checkout unavailable') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>
+          {worker.isDemo && <PillButton className="simulate-tip" onClick={submitSimulation} disabled={simulateTip.isPending}>{simulateTip.isPending ? (ar ? 'جارٍ حفظ المحاكاة…' : 'Saving simulation…') : (ar ? 'محاكاة الإكرامية' : 'Simulate tip')} {!simulateTip.isPending && <Sparkles size={16}/>}</PillButton>}
+        </div>
+      </form>}
     </>}
   </div></main></LocalizedTree>;
 }
 function ConfirmationPage() {
   const { language } = useLanguage();
   const params = new URLSearchParams(window.location.search);
-  const tipId = params.get('tipId') || sessionStorage.getItem('sanad-tip-id') || '';
-  const demoMode = sessionStorage.getItem('sanad-tip-mode') === 'demo';
+  const tipId = params.get('tipId') || getSessionValue('sanad-tip-id') || '';
+  const demoMode = getSessionValue('sanad-tip-mode') === 'demo';
   const publicDemo = import.meta.env.PROD;
   const publicTestCheckout = publicDemo && stripeTestCheckoutEnabled;
   const demoOnly = publicDemo && !publicTestCheckout;
@@ -548,7 +661,7 @@ function ConfirmationPage() {
   const copy = demoOnly
     ? (language === 'ar' ? 'الدفع معطل. لم يتم حفظ أو تحصيل أي إكرامية.' : 'Checkout is disabled. No tip was saved or charged.')
     : state === 'demo' ? (language === 'ar' ? 'تم تأكيد عملية تجريبية عبر Stripe. لم يتم تحصيل مبلغ حقيقي.' : 'Stripe confirmed a test payment. No real charge was made.') : state === 'succeeded' ? 'Your appreciation has been received. Thank you for making someone’s day.' : state === 'pending' ? 'We’re waiting for a confirmed payment status. This page will update automatically.' : 'No charge was confirmed. You can safely try again.';
-  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? publicTestCheckout ? (language === 'ar' ? 'دفع تجريبي' : 'STRIPE TEST CHECKOUT') : 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">We couldn’t verify the payment status. <button onClick={()=>void refetch()}>Check again</button></div>}{status && <div className="outcome-details"><span>Recipient</span><strong>{status.workerName || sessionStorage.getItem('sanad-tip-worker') || 'SANAD worker'}</strong><span>Worker tip</span><strong>{money(status.amountFils)}</strong>{typeof status.usdAmountCents === 'number' && <><span>Stripe checkout</span><strong>{usdMoney(status.usdAmountCents)}</strong></>}</div>}{status?.isDemo && <div className="demo-callout">DEMO — this status does not represent a real charge.</div>}<Link href="/" className="cta-primary centered">{state === 'failed' || state === 'cancelled' ? 'Return to SANAD' : 'Back to SANAD'} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
+  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? publicTestCheckout ? (language === 'ar' ? 'دفع تجريبي' : 'STRIPE TEST CHECKOUT') : 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">{localized('We couldn’t verify the payment status.', language)} <button onClick={()=>void refetch()}>{localized('Check again',language)}</button></div>}{status && <div className="outcome-details"><span>{localized('Recipient',language)}</span><strong>{status.workerName || getSessionValue('sanad-tip-worker') || 'SANAD worker'}</strong><span>{localized('Worker tip',language)}</span><strong>{money(status.amountFils)}</strong>{typeof status.usdAmountCents === 'number' && <><span>Stripe checkout</span><strong>{usdMoney(status.usdAmountCents)}</strong></>}</div>}{status?.isDemo && <div className="demo-callout">{localized('DEMO — this status does not represent a real charge.',language)}</div>}<Link href="/" className="cta-primary centered">{localized('Return to SANAD',language)} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
 }
 
 const workerNav = [
@@ -610,7 +723,13 @@ function TransactionTable({ transactions, empty = 'Nothing to show yet.' }: { tr
 function WorkerOverview() {
   const q = useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
   const d=q.data;
-  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&<><div className="metric-grid"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/><Metric label="Average rating" value={d.averageRating==null?'—':`${d.averageRating.toFixed(1)} / 5`} caption={d.averageRating==null?'No ratings yet':'From your guests'} icon={Star}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>}</QueryState></PortalLayout>;
+  const { language } = useLanguage();
+  const ratingCaption = !d || d.ratingCount === 0
+    ? (language === 'ar' ? 'لا توجد تقييمات بعد' : 'No ratings yet')
+    : language === 'ar'
+      ? d.ratingCount === 1 ? 'من تقييم واحد' : d.ratingCount === 2 ? 'من تقييمين' : `من ${d.ratingCount} تقييمات`
+      : `From ${d.ratingCount} ${d.ratingCount === 1 ? 'rating' : 'ratings'}`;
+  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&<><div className="metric-grid"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/><Metric label="Average rating" value={d.averageRating==null?'—':`${d.averageRating.toFixed(1)} / 5`} caption={ratingCaption} icon={Star}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>}</QueryState></PortalLayout>;
 }
 function WorkerTransactions() {
   const q=useListWorkerTransactions({query:{queryKey:getListWorkerTransactionsQueryKey()}});
@@ -825,7 +944,65 @@ function WorkerProtected({ children }: { children: ReactNode }) {
 }
 function AuthRoutes() {
   const [,setLocation]=useLocation();
-  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={appearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={{signIn:{start:{title:'Welcome back',subtitle:'Sign in to your SANAD account'}},signUp:{start:{title:'Join SANAD',subtitle:'Bring a little more appreciation to your team'}}}} routerPush={(to)=>setLocation(stripBase(to))} routerReplace={(to)=>setLocation(stripBase(to),{replace:true})}>
+  const { language } = useLanguage();
+  const localization = language === 'ar'
+    ? {
+        locale: 'ar',
+        socialButtonsBlockButton: 'المتابعة باستخدام {{provider}}',
+        dividerText: 'أو',
+        formFieldLabel__emailAddress: 'البريد الإلكتروني',
+        formFieldLabel__phoneNumber: 'رقم الهاتف',
+        formFieldLabel__password: 'كلمة المرور',
+        formFieldLabel__firstName: 'الاسم الأول',
+        formFieldLabel__lastName: 'اسم العائلة',
+        formFieldInputPlaceholder__emailAddress: 'أدخل بريدك الإلكتروني',
+        formFieldInputPlaceholder__password: 'أدخل كلمة المرور',
+        formFieldAction__forgotPassword: 'هل نسيت كلمة المرور؟',
+        formButtonPrimary: 'متابعة',
+        backButton: 'رجوع',
+        signIn: {
+          start: {
+            title: 'مرحباً بعودتك',
+            subtitle: 'سجّل الدخول إلى حسابك في سند',
+            actionText: 'ليس لديك حساب؟',
+            actionLink: 'إنشاء حساب',
+          },
+          password: {
+            title: 'أدخل كلمة المرور',
+            subtitle: 'أدخل كلمة المرور للمتابعة',
+            actionLink: 'استخدام طريقة أخرى',
+          },
+          forgotPassword: {
+            title: 'إعادة تعيين كلمة المرور',
+            subtitle: 'اتبع التعليمات لإعادة تعيين كلمة المرور.',
+            formTitle: 'إرسال رابط إعادة التعيين',
+            resendButton: 'إعادة الإرسال',
+          },
+          resetPassword: {
+            title: 'تعيين كلمة مرور جديدة',
+            formButtonPrimary: 'حفظ كلمة المرور',
+            successMessage: 'تم تحديث كلمة المرور.',
+          },
+        },
+        signUp: {
+          start: {
+            title: 'انضم إلى سند',
+            subtitle: 'أنشئ حساب شركتك لإدارة فريقك',
+            actionText: 'لديك حساب بالفعل؟',
+            actionLink: 'تسجيل الدخول',
+          },
+        },
+      }
+    : {
+        locale: 'en-US',
+        signIn: {
+          start: { title: 'Welcome back', subtitle: 'Sign in to your SANAD account' },
+        },
+        signUp: {
+          start: { title: 'Join SANAD', subtitle: 'Bring a little more appreciation to your team' },
+        },
+      };
+  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={appearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={localization} routerPush={(to)=>setLocation(stripBase(to))} routerReplace={(to)=>setLocation(stripBase(to),{replace:true})}>
     <Switch>
       <Route path="/" component={Landing}/>
       <Route path="/continue" component={()=> <Protected><SignedInHome/></Protected>}/>

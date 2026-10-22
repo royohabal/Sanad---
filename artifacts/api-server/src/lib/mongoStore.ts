@@ -52,6 +52,13 @@ function withoutMongoId<T>(value: Document): T {
   return document as T;
 }
 
+function applyDemoFilter(match: Document, isDemo?: boolean): void {
+  if (isDemo === undefined) return;
+  match.$or = isDemo
+    ? [{ isDemo: true }, { isDemo: { $exists: false } }]
+    : [{ isDemo: false }, { isDemo: { $exists: false } }];
+}
+
 function withMongoId<T extends { id: string }>(value: T): Document {
   return { ...value, _id: value.id };
 }
@@ -141,7 +148,7 @@ export async function normalizeDemoWorkerNames(): Promise<number> {
 
   const workersCollection = await collection("workers");
   const demoWorkers = await workersCollection
-    .find({ isDemo: true })
+    .find({ isDemo: true, slug: { $ne: "ahmed-almutairi" } })
     .project<{
       id: string;
       companyId: string;
@@ -563,7 +570,7 @@ export async function getTipWithNames(id: string): Promise<
 }
 
 export async function getPublicWorker(slug: string): Promise<
-  (Pick<Worker, "id" | "slug" | "name" | "arabicName" | "role" | "branch" | "photoUrl"> & {
+  (Pick<Worker, "id" | "slug" | "name" | "arabicName" | "role" | "branch" | "photoUrl" | "isDemo"> & {
     companyName: string;
   }) | null
 > {
@@ -579,6 +586,7 @@ export async function getPublicWorker(slug: string): Promise<
     role: worker.role,
     branch: worker.branch,
     photoUrl: worker.photoUrl,
+    isDemo: worker.isDemo,
     companyName: company.name,
   };
 }
@@ -587,6 +595,7 @@ export async function sumTipsForWorkers(
   workerIds: string[],
   statuses: readonly TipStatus[],
   range?: DateRange,
+  isDemo?: boolean,
 ): Promise<number> {
   if (!workerIds.length) return 0;
   const match: Document = {
@@ -594,6 +603,7 @@ export async function sumTipsForWorkers(
     status: { $in: [...statuses] },
   };
   if (range) match.createdAt = { $gte: range.from, $lt: range.to };
+  applyDemoFilter(match, isDemo);
   const results = await (await collection("tips"))
     .aggregate<{ total: number }>([
       { $match: match },
@@ -607,11 +617,16 @@ export async function sumPayoutsForWorkers(
   workerIds: string[],
   status?: PayoutStatus,
   month?: string,
+  isDemo?: boolean,
 ): Promise<number> {
   if (!workerIds.length) return 0;
   const match: Document = { workerId: { $in: workerIds } };
   if (status) match.status = status;
   if (month) match.month = month;
+  if (isDemo === true) match.isDemo = true;
+  else if (isDemo === false) {
+    match.$or = [{ isDemo: false }, { isDemo: { $exists: false } }];
+  }
   const results = await (await collection("payouts"))
     .aggregate<{ total: number }>([
       { $match: match },
@@ -624,23 +639,53 @@ export async function sumPayoutsForWorkers(
 export async function averageRatingForWorker(
   workerId: string,
   statuses: readonly TipStatus[],
-): Promise<number | null> {
+  isDemo?: boolean,
+): Promise<{ averageRating: number | null; ratingCount: number }> {
+  const match: Document = {
+    workerId,
+    status: { $in: [...statuses] },
+    rating: {
+      $type: "number",
+      $gte: 1,
+      $lte: 5,
+      $mod: [1, 0],
+    },
+  };
+  applyDemoFilter(match, isDemo);
   const results = await (await collection("tips"))
-    .aggregate<{ average: number | null }>([
-      { $match: { workerId, status: { $in: [...statuses] } } },
-      { $group: { _id: null, average: { $avg: "$rating" } } },
+    .aggregate<{ averageRating: number | null; ratingCount: number }>([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: "$rating" },
+          ratingCount: { $sum: 1 },
+        },
+      },
     ])
     .toArray();
-  return results[0]?.average == null ? null : Number(results[0].average);
+  return {
+    averageRating:
+      results[0]?.averageRating == null
+        ? null
+        : Number(results[0].averageRating),
+    ratingCount: Number(results[0]?.ratingCount ?? 0),
+  };
 }
 
 export async function monthlyTipsForWorker(
   workerId: string,
   statuses: readonly TipStatus[],
+  isDemo?: boolean,
 ): Promise<Array<{ month: string; amountFils: number }>> {
+  const match: Document = {
+    workerId,
+    status: { $in: [...statuses] },
+  };
+  applyDemoFilter(match, isDemo);
   const results = await (await collection("tips"))
     .aggregate<{ _id: string; amountFils: number }>([
-      { $match: { workerId, status: { $in: [...statuses] } } },
+      { $match: match },
       {
         $group: {
           _id: {
@@ -662,13 +707,19 @@ export async function monthlyTipsForWorker(
 export async function monthlyTipsForCompany(
   companyId: string,
   statuses: readonly TipStatus[],
+  isDemo?: boolean,
 ): Promise<Array<{ month: string; amountFils: number }>> {
   const workers = await getWorkersByCompany(companyId);
   const workerIds = workers.map(({ id }) => id);
   if (!workerIds.length) return [];
+  const match: Document = {
+    workerId: { $in: workerIds },
+    status: { $in: [...statuses] },
+  };
+  applyDemoFilter(match, isDemo);
   const results = await (await collection("tips"))
     .aggregate<{ _id: string; amountFils: number }>([
-      { $match: { workerId: { $in: workerIds }, status: { $in: [...statuses] } } },
+      { $match: match },
       {
         $group: {
           _id: {
@@ -693,8 +744,19 @@ export async function workerTransactionRows(
 ): Promise<TransactionRow[]> {
   const worker = await getWorkerById(workerId);
   if (!worker) return [];
+  const match: Document = worker.isDemo
+    ? {
+        workerId,
+        status: { $in: ["succeeded", "demo"] },
+        $or: [{ isDemo: true }, { isDemo: { $exists: false } }],
+      }
+    : {
+        workerId,
+        status: "succeeded",
+        $or: [{ isDemo: false }, { isDemo: { $exists: false } }],
+      };
   const cursor = (await collection("tips"))
-    .find({ workerId })
+    .find(match)
     .sort({ createdAt: -1 });
   if (limit) cursor.limit(limit);
   const tips = await cursor.toArray();
@@ -721,8 +783,25 @@ export async function companyTransactionRows(
   const workers = await getWorkersByCompany(companyId);
   if (!workers.length) return [];
   const workerById = new Map(workers.map((worker) => [worker.id, worker]));
+  const demoWorkerIds = workers.filter((worker) => worker.isDemo).map(({ id }) => id);
+  const realWorkerIds = workers.filter((worker) => !worker.isDemo).map(({ id }) => id);
+  const branches: Document[] = [];
+  if (demoWorkerIds.length) {
+    branches.push({
+      workerId: { $in: demoWorkerIds },
+      status: { $in: ["succeeded", "demo"] },
+      $or: [{ isDemo: true }, { isDemo: { $exists: false } }],
+    });
+  }
+  if (realWorkerIds.length) {
+    branches.push({
+      workerId: { $in: realWorkerIds },
+      status: "succeeded",
+      $or: [{ isDemo: false }, { isDemo: { $exists: false } }],
+    });
+  }
   const tips = await (await collection("tips"))
-    .find({ workerId: { $in: workers.map(({ id }) => id) } })
+    .find(branches.length === 1 ? branches[0] : { $or: branches })
     .sort({ createdAt: -1 })
     .limit(limit)
     .toArray();

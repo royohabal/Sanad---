@@ -70,6 +70,33 @@ paths:
           description: Invalid tip quote request
         "502":
           description: Exchange-rate service unavailable
+  /tips/simulate:
+    post:
+      operationId: simulateTip
+      tags: [tips]
+      summary: Save a clearly labelled simulated tip for a demo worker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TipSimulationInput" }
+      responses:
+        "200":
+          description: Previously saved simulated tip returned for an idempotent retry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TipSimulationResponse" }
+        "201":
+          description: Simulated tip saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TipSimulationResponse" }
+        "400":
+          description: Invalid amount, rating, or request identifier
+        "404":
+          description: Demo worker not found
+        "409":
+          description: Request identifier was already used for different tip data
   /tips/checkout:
     post:
       operationId: createTipCheckout
@@ -458,7 +485,7 @@ components:
         - status
     PublicWorker:
       type: object
-      required: [id, slug, name, companyName, role]
+      required: [id, slug, name, companyName, role, isDemo]
       properties:
         id: { type: string }
         slug: { type: string }
@@ -468,12 +495,33 @@ components:
         role: { type: string }
         branch: { type: ["string", "null"] }
         photoUrl: { type: ["string", "null"], format: uri }
+        isDemo: { type: boolean }
+    TipSimulationInput:
+      type: object
+      required: [workerSlug, amountFils, requestId]
+      properties:
+        workerSlug: { type: string, minLength: 1, maxLength: 180 }
+        amountFils: { type: integer, minimum: 250, maximum: 100000 }
+        rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
+        requestId: { type: string, format: uuid }
+    TipSimulationResponse:
+      type: object
+      required: [tipId, workerSlug, workerName, amountFils, currency, status, rating, isDemo]
+      properties:
+        tipId: { type: string, format: uuid }
+        workerSlug: { type: string }
+        workerName: { type: string }
+        amountFils: { type: integer }
+        currency: { type: string, enum: [KWD] }
+        status: { type: string, enum: [demo] }
+        rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
+        isDemo: { type: boolean, enum: [true] }
     TipCheckoutInput:
       type: object
       required: [workerSlug, amountFils, quoteToken, requestId]
       properties:
         workerSlug: { type: string, minLength: 1 }
-        amountFils: { type: integer, minimum: 250, maximum: 1000000 }
+        amountFils: { type: integer, minimum: 250, maximum: 100000 }
         rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
         quoteToken: { type: string, minLength: 1 }
         requestId: { type: string, format: uuid }
@@ -482,7 +530,7 @@ components:
       required: [workerSlug, amountFils]
       properties:
         workerSlug: { type: string, minLength: 1 }
-        amountFils: { type: integer, minimum: 250, maximum: 1000000 }
+        amountFils: { type: integer, minimum: 250, maximum: 100000 }
         rating: { type: ["integer", "null"], minimum: 1, maximum: 5 }
     TipQuote:
       type: object
@@ -627,7 +675,7 @@ components:
         temporaryPassword: { type: string }
     WorkerDashboard:
       type: object
-      required: [worker, totalTipsFils, pendingTipsFils, paidTipsFils, monthTipsFils, averageRating, monthly, recentTransactions, isDemo]
+      required: [worker, totalTipsFils, pendingTipsFils, paidTipsFils, monthTipsFils, averageRating, ratingCount, monthly, recentTransactions, isDemo]
       properties:
         worker: { $ref: "#/components/schemas/Worker" }
         totalTipsFils: { type: integer }
@@ -635,6 +683,7 @@ components:
         paidTipsFils: { type: integer }
         monthTipsFils: { type: integer }
         averageRating: { type: ["number", "null"] }
+        ratingCount: { type: integer, minimum: 0 }
         monthly:
           type: array
           items: { $ref: "#/components/schemas/MonthlyValue" }

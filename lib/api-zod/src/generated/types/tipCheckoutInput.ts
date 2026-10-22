@@ -11,7 +11,7 @@ export interface TipCheckoutInput {
   workerSlug: string;
   /**
      * @minimum 250
-     * @maximum 1000000
+     * @maximum 100000
      */
   amountFils: number;
   /**
