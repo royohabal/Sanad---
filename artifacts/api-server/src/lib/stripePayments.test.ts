@@ -10,8 +10,27 @@ test("keeps Stripe checkout enabled in development", () => {
   assert.equal(isStripeCheckoutEnabled("development"), true);
 });
 
-test("disables Stripe checkout in production", () => {
-  assert.equal(isStripeCheckoutEnabled("production"), false);
+test("keeps Stripe checkout disabled in production by default", () => {
+  assert.equal(isStripeCheckoutEnabled("production", "", ""), false);
+});
+
+test("enables production demo checkout only with an explicit flag and test key", () => {
+  assert.equal(
+    isStripeCheckoutEnabled("production", "true", "sk_test_DEMO_KEY"),
+    true,
+  );
+  assert.equal(
+    isStripeCheckoutEnabled("production", "true", "sk_live_NOT_ALLOWED"),
+    false,
+  );
+  assert.equal(
+    isStripeCheckoutEnabled("production", "true", ""),
+    false,
+  );
+  assert.equal(
+    isStripeCheckoutEnabled("production", "false", "sk_test_DEMO_KEY"),
+    false,
+  );
 });
 
 test("accepts only a Stripe test-mode secret key", () => {

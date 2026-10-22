@@ -40,8 +40,15 @@ export class StripePaymentError extends Error {
 
 export function isStripeCheckoutEnabled(
   environment: string | undefined = process.env.NODE_ENV,
+  productionTestCheckoutEnabled =
+    process.env.SANAD_STRIPE_TEST_CHECKOUT_ENABLED,
+  stripeSecretKey = process.env.STRIPE_SECRET_KEY,
 ): boolean {
-  return environment !== "production";
+  if (environment !== "production") return true;
+  return (
+    productionTestCheckoutEnabled === "true" &&
+    stripeSecretKey?.trim().startsWith("sk_test_") === true
+  );
 }
 
 export function requireStripeTestSecretKey(secretKey: string | undefined): string {

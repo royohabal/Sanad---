@@ -32,6 +32,9 @@ import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const stripeTestCheckoutEnabled =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_STRIPE_TEST_CHECKOUT_ENABLED === 'true';
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 function stripBase(path: string) { return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path; }
@@ -309,6 +312,7 @@ function Landing() {
   const { language } = useLanguage();
   const ar = language === 'ar';
   const publicDemo = import.meta.env.PROD;
+  const publicTestCheckout = publicDemo && stripeTestCheckoutEnabled;
   const previousLanguage = useRef(language);
   const [demoAmount, setDemoAmount] = useState(1);
   const [demoRating, setDemoRating] = useState<number | null>(null);
@@ -328,7 +332,7 @@ function Landing() {
       <div className="hero-copy landing-hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> {ar ? 'الكويت · إكراميات رقمية' : 'KUWAIT · DIGITAL TIPPING'}</div>
         <h1>{ar ? <>شكراً،<br/><em>بطريقة أسهل.</em></> : <>A simple way<br/>to say <em>thank you.</em></>}</h1>
         <div className="hero-actions"><Link href="/tip/ahmed-almutairi" className="cta-primary" data-testid="link-tip-now">{ar ? 'أرسل إكرامية' : 'Tip Now'} <ArrowUpRight size={17}/></Link><Link href="/sign-up" className="cta-quiet" data-testid="link-company-signup-hero">{ar ? 'للشركات' : 'For companies'} <ChevronRight size={16}/></Link></div>
-        <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? (ar ? 'عرض عام · الدفع معطل' : 'Public demo · checkout disabled') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
+        <div className="trust-note"><ShieldCheck size={16}/><span>{publicDemo ? publicTestCheckout ? (ar ? 'وضع Stripe التجريبي · لا توجد رسوم حقيقية' : 'Stripe test mode · no real charge') : (ar ? 'عرض عام · الدفع معطل' : 'Public demo · checkout disabled') : (ar ? 'دفع آمن · لا حاجة لإنشاء حساب' : 'Secure checkout · No account needed')}</span></div>
       </div>
       <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark"><Handshake className="landing-handshake" strokeWidth={1.45}/></div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
     </section>
@@ -337,17 +341,17 @@ function Landing() {
       <div className="how-steps">
         <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>01</small><h3>{ar ? 'امسح الرمز' : 'Scan the badge'}</h3><p>{ar ? 'امسح رمز الموظف لفتح صفحة سند الخاصة به.' : 'Scan the worker’s QR badge to open their SANAD page.'}</p></article>
         <article className="how-step"><span className="how-icon"><Banknote size={21}/></span><small>02</small><h3>{ar ? 'اختر إكراميتك' : 'Choose your tip'}</h3><p>{ar ? 'اختر المبلغ وأضف تقييماً إن رغبت.' : 'Pick an amount and leave a rating if you like.'}</p></article>
-         <article className="how-step"><span className="how-icon"><ShieldCheck size={21}/></span><small>03</small><h3>{publicDemo ? (ar ? 'معاينة فقط' : 'Preview only') : (ar ? 'ادفع بأمان' : 'Check out securely')}</h3><p>{publicDemo ? (ar ? 'الدفع معطل في العرض العام.' : 'Checkout is disabled in this public demo.') : (ar ? 'أكمل الدفع الآمن دون إنشاء حساب.' : 'Complete secure checkout. No account needed.')}</p></article>
+         <article className="how-step"><span className="how-icon"><ShieldCheck size={21}/></span><small>03</small><h3>{publicDemo ? publicTestCheckout ? (ar ? 'دفع Stripe تجريبي' : 'Stripe test checkout') : (ar ? 'معاينة فقط' : 'Preview only') : (ar ? 'ادفع بأمان' : 'Check out securely')}</h3><p>{publicDemo ? publicTestCheckout ? (ar ? 'استخدم بطاقة تجريبية؛ لن يتم خصم أي مبلغ حقيقي.' : 'Use a test card. No real charge will be made.') : (ar ? 'الدفع معطل في العرض العام.' : 'Checkout is disabled in this public demo.') : (ar ? 'أكمل الدفع الآمن دون إنشاء حساب.' : 'Complete secure checkout. No account needed.')}</p></article>
       </div>
     </section>
-     <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? (ar ? 'معاينة فقط. الدفع غير متاح في الموقع المنشور.' : 'Preview only. Checkout is disabled on the published demo.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
+     <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'معاينة فقط. الدفع غير متاح في الموقع المنشور.' : 'Preview only. Checkout is disabled on the published demo.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
       <div className="tip-demo" aria-live="polite">
         <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span><strong>{ar ? 'جرّب إرسال الشكر' : 'Try a little thank you'}</strong></div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
         {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
           <div className="demo-amounts" role="group" aria-label={ar ? 'اختر مبلغاً تجريبياً' : 'Choose a sample tip amount'}>{demoAmounts.map((amount, index) => <button key={amount} type="button" data-testid={`button-demo-amount-${amount.replace('.', '-')}`} className={demoAmount === index ? 'selected' : ''} aria-pressed={demoAmount === index} onClick={() => setDemoAmount(index)}>KWD {amount}</button>)}</div>
           <div className="demo-controls"><div><span>{ar ? 'تقييم اختياري' : 'OPTIONAL RATING'}</span><div className="demo-stars" role="group" aria-label={ar ? 'اختر تقييماً' : 'Choose a rating'}>{[1,2,3,4,5].map((rating) => <button key={rating} type="button" data-testid={`button-demo-rating-${rating}`} aria-label={`${rating} ${ar ? 'نجوم' : rating === 1 ? 'star' : 'stars'}`} aria-pressed={demoRating === rating} onClick={() => setDemoRating(demoRating === rating ? null : rating)}><Star size={17} fill={demoRating && rating <= demoRating ? 'currentColor' : 'none'}/></button>)}</div></div><strong data-testid="text-demo-selected-amount">KWD {demoAmounts[demoAmount]}</strong></div>
           <button type="button" className="demo-submit" data-testid="button-preview-tip-confirmation" onClick={() => setDemoComplete(true)}>{ar ? 'عرض التأكيد التجريبي' : 'Preview confirmation'} <ArrowUpRight size={15}/></button>
-          <Link href="/tip/ahmed-almutairi" className="real-tip-link" data-testid="link-real-tip">{ar ? 'أرسل إكرامية حقيقية' : 'Send a real tip'} <ArrowUpRight size={14}/></Link>
+           <Link href="/tip/ahmed-almutairi" className="real-tip-link" data-testid="link-real-tip">{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع التجريبي' : 'Try test checkout') : (ar ? 'افتح صفحة الإكرامية' : 'Open tip page') : (ar ? 'أرسل إكرامية حقيقية' : 'Send a real tip')} <ArrowUpRight size={14}/></Link>
         </>}
       </div>
     </section>
@@ -367,7 +371,8 @@ function TipPage() {
   const slug = params?.slug ?? '';
   const { language } = useLanguage();
   const ar = language === 'ar';
-  const checkoutEnabled = import.meta.env.DEV;
+  const checkoutEnabled = stripeTestCheckoutEnabled;
+  const publicTestCheckout = import.meta.env.PROD && checkoutEnabled;
   const publishedDemoWorker = import.meta.env.PROD && slug === 'ahmed-almutairi'
     ? {
         id: '00000000-0000-4000-8000-000000000001',
@@ -522,7 +527,7 @@ function TipPage() {
         </section>}
          {checkoutEnabled ? <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع تجريبي آمن عبر Stripe · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div> : <div className="demo-callout" role="status">{ar ? 'عرض عام فقط · الدفع معطل. لا يتم حفظ الإكراميات.' : 'Public demo only · checkout is disabled. Tips are not saved.'}</div>}
         {notice && <div className="form-notice" role="alert">{notice}</div>}
-         <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending}>{!checkoutEnabled ? (ar ? 'الدفع معطل في العرض العام' : 'Checkout disabled in public demo') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>
+          <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending}>{!checkoutEnabled ? (ar ? 'الدفع معطل في العرض العام' : 'Checkout disabled in public demo') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>
       </form>
     </>}
   </div></main></LocalizedTree>;
@@ -533,15 +538,17 @@ function ConfirmationPage() {
   const tipId = params.get('tipId') || sessionStorage.getItem('sanad-tip-id') || '';
   const demoMode = sessionStorage.getItem('sanad-tip-mode') === 'demo';
   const publicDemo = import.meta.env.PROD;
-  const { data: status, isLoading, isError, refetch } = useGetTipStatus(tipId, { query: { enabled: !!tipId && !publicDemo, queryKey: getGetTipStatusQueryKey(tipId), refetchInterval: (query) => query.state.data?.status === 'pending' ? 3000 : false } });
-  const state = publicDemo ? 'demo' : status?.status || (demoMode ? 'demo' : 'pending');
-  const title = publicDemo
+  const publicTestCheckout = publicDemo && stripeTestCheckoutEnabled;
+  const demoOnly = publicDemo && !publicTestCheckout;
+  const { data: status, isLoading, isError, refetch } = useGetTipStatus(tipId, { query: { enabled: !!tipId && !demoOnly, queryKey: getGetTipStatusQueryKey(tipId), refetchInterval: (query) => query.state.data?.status === 'pending' ? 3000 : false } });
+  const state = demoOnly ? 'demo' : status?.status || (demoMode ? 'demo' : 'pending');
+  const title = demoOnly
     ? (language === 'ar' ? 'هذا عرض عام فقط.' : 'Public demo only.')
-    : state === 'succeeded' ? 'Your thank you is on its way.' : state === 'demo' ? 'A demo tip is ready.' : state === 'failed' ? 'This payment didn’t go through.' : state === 'cancelled' ? 'Checkout was cancelled.' : 'Checking your tip…';
-  const copy = publicDemo
+     : state === 'succeeded' ? 'Your thank you is on its way.' : state === 'demo' ? (language === 'ar' ? 'اكتمل الدفع التجريبي.' : 'Stripe test checkout complete.') : state === 'failed' ? 'This payment didn’t go through.' : state === 'cancelled' ? 'Checkout was cancelled.' : 'Checking your tip…';
+  const copy = demoOnly
     ? (language === 'ar' ? 'الدفع معطل. لم يتم حفظ أو تحصيل أي إكرامية.' : 'Checkout is disabled. No tip was saved or charged.')
-    : state === 'demo' ? 'This is a demonstration only. No payment was made or charged.' : state === 'succeeded' ? 'Your appreciation has been received. Thank you for making someone’s day.' : state === 'pending' ? 'We’re waiting for a confirmed payment status. This page will update automatically.' : 'No charge was confirmed. You can safely try again.';
-  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">We couldn’t verify the payment status. <button onClick={()=>void refetch()}>Check again</button></div>}{status && <div className="outcome-details"><span>Recipient</span><strong>{status.workerName || sessionStorage.getItem('sanad-tip-worker') || 'SANAD worker'}</strong><span>Worker tip</span><strong>{money(status.amountFils)}</strong>{typeof status.usdAmountCents === 'number' && <><span>Stripe checkout</span><strong>{usdMoney(status.usdAmountCents)}</strong></>}</div>}{status?.isDemo && <div className="demo-callout">DEMO — this status does not represent a real charge.</div>}<Link href="/" className="cta-primary centered">{state === 'failed' || state === 'cancelled' ? 'Return to SANAD' : 'Back to SANAD'} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
+    : state === 'demo' ? (language === 'ar' ? 'تم تأكيد عملية تجريبية عبر Stripe. لم يتم تحصيل مبلغ حقيقي.' : 'Stripe confirmed a test payment. No real charge was made.') : state === 'succeeded' ? 'Your appreciation has been received. Thank you for making someone’s day.' : state === 'pending' ? 'We’re waiting for a confirmed payment status. This page will update automatically.' : 'No charge was confirmed. You can safely try again.';
+  return <LocalizedTree><main className="tip-page"><div className="tip-top"><Brand/><LanguageToggle/></div><section className="outcome-card rise"><div className={`outcome-symbol outcome-${state}`}>{state === 'succeeded' ? <Check size={29}/> : state === 'demo' ? <Sparkles size={27}/> : state === 'failed' ? <X size={27}/> : <Clock3 size={27}/>}</div><span className="eyebrow">{state === 'succeeded' ? 'THANK YOU SENT' : state === 'demo' ? publicTestCheckout ? (language === 'ar' ? 'دفع تجريبي' : 'STRIPE TEST CHECKOUT') : 'DEVELOPMENT DEMO' : 'TIP STATUS'}</span><h1>{title}</h1><p>{copy}</p>{isLoading && !demoMode && <div className="loading-line"/>}{isError && <div className="form-notice">We couldn’t verify the payment status. <button onClick={()=>void refetch()}>Check again</button></div>}{status && <div className="outcome-details"><span>Recipient</span><strong>{status.workerName || sessionStorage.getItem('sanad-tip-worker') || 'SANAD worker'}</strong><span>Worker tip</span><strong>{money(status.amountFils)}</strong>{typeof status.usdAmountCents === 'number' && <><span>Stripe checkout</span><strong>{usdMoney(status.usdAmountCents)}</strong></>}</div>}{status?.isDemo && <div className="demo-callout">DEMO — this status does not represent a real charge.</div>}<Link href="/" className="cta-primary centered">{state === 'failed' || state === 'cancelled' ? 'Return to SANAD' : 'Back to SANAD'} <ArrowUpRight size={17}/></Link></section><p className="tip-powered">A thoughtful little gesture, powered by <b>SANAD</b></p></main></LocalizedTree>;
 }
 
 const workerNav = [
