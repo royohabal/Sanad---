@@ -2,6 +2,7 @@ import { clerkClient, getAuth } from "@clerk/express";
 import { createHash, randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { getPublicAppOrigin } from "../lib/publicAppUrl";
 import type { Worker } from "@workspace/db";
 import {
   createTipCheckoutSession,
@@ -194,14 +195,11 @@ async function currentWorker(req: Request, res: Response) {
 }
 
 function makeUrl(req: Request, path: string): string {
-  const host =
-    req.get("x-forwarded-host")?.split(",")[0]?.trim() ??
-    req.get("host") ??
-    "localhost";
-  const protocol =
-    req.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
-    (host.startsWith("localhost") ? "http" : "https");
-  const origin = `${protocol}://${host}`;
+  const origin = getPublicAppOrigin({
+    forwardedHost: req.get("x-forwarded-host"),
+    forwardedProto: req.get("x-forwarded-proto"),
+    host: req.get("host"),
+  });
   let basePath = "";
   const referer = req.get("referer");
   if (referer) {
