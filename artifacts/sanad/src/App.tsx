@@ -494,7 +494,7 @@ function Landing() {
       <div className="hero-art rise landing-mark-art" aria-hidden="true"><div className="art-sun"/><div className="landing-mark"><Handshake className="landing-handshake" strokeWidth={1.45}/></div><div className="hero-caption"><span>SANAD · سند</span><span>KUWAIT</span></div><div className="sadu art-pattern"/></div>
     </section>
     <section id="how-it-works" className="how-section landing-reveal" aria-labelledby="how-title">
-      <div className="how-heading"><span className="eyebrow">{ar ? 'بكل بساطة' : 'THOUGHTFULLY SIMPLE'}</span><h2 id="how-title">{ar ? 'ثلاث خطوات، وشكر يصل.' : 'Three steps. A thank you delivered.'}</h2></div>
+      <div className="how-heading"><span className="eyebrow">{ar ? 'بكل بساطة' : 'THOUGHTFULLY SIMPLE'}</span><h2 id="how-title">{ar ? 'ثلاث خطوات، ويصل شكرك.' : 'Three steps. A thank you delivered.'}</h2></div>
       <div className="how-steps">
         <article className="how-step"><span className="how-icon"><Users size={21}/></span><small>01</small><h3>{ar ? 'أضف الموظفين' : 'Company adds workers'}</h3><p>{ar ? 'تضيف الشركة فريقها إلى سند.' : 'The company adds its team to SANAD.'}</p></article>
         <article className="how-step"><span className="how-icon"><QrCode size={21}/></span><small>02</small><h3>{ar ? 'استلم رمزك' : 'Worker gets a QR'}</h3><p>{ar ? 'يحصل كل موظف على رمز QR شخصي.' : 'Each worker gets a personal QR badge.'}</p></article>
