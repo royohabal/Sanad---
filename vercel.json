@@ -4,7 +4,7 @@
     "api-server": {
       "root": "artifacts/api-server",
       "framework": "express",
-      "entrypoint": "dist/index.mjs",
+      "entrypoint": "src/index.ts",
       "installCommand": "pnpm install --filter @workspace/api-server... --frozen-lockfile",
       "buildCommand": "pnpm run build"
     },
