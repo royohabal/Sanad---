@@ -450,12 +450,12 @@ async function seedDemoCompany(companyId: string, actorId: string) {
   if ((await getWorkersByCompany(companyId)).length) return;
 
   const demoWorkers = [
-    { name: "Worker No. 1", arabicName: "الموظف رقم ١", role: "Service host", branch: "Salmiya" },
-    { name: "Worker No. 2", arabicName: "الموظف رقم ٢", role: "Barista", branch: "Sharq" },
-    { name: "Worker No. 3", arabicName: "الموظف رقم ٣", role: "Guest services", branch: "Salmiya" },
-    { name: "Worker No. 4", arabicName: "الموظف رقم ٤", role: "Service team", branch: "Sharq" },
-    { name: "Worker No. 5", arabicName: "الموظف رقم ٥", role: "Service team", branch: "Salmiya" },
-    { name: "Worker No. 6", arabicName: "الموظف رقم ٦", role: "Service team", branch: "Sharq" },
+    { name: "Demo worker 1", arabicName: "موظف تجريبي ١", role: "Service host", branch: "Salmiya" },
+    { name: "Demo worker 2", arabicName: "موظف تجريبي ٢", role: "Barista", branch: "Sharq" },
+    { name: "Demo worker 3", arabicName: "موظف تجريبي ٣", role: "Guest services", branch: "Salmiya" },
+    { name: "Demo worker 4", arabicName: "موظف تجريبي ٤", role: "Service team", branch: "Sharq" },
+    { name: "Demo worker 5", arabicName: "موظف تجريبي ٥", role: "Service team", branch: "Salmiya" },
+    { name: "Demo worker 6", arabicName: "موظف تجريبي ٦", role: "Service team", branch: "Sharq" },
   ];
   const workers = await Promise.all(
     demoWorkers.map((item) =>
@@ -553,19 +553,7 @@ async function seedDemoCompany(companyId: string, actorId: string) {
 async function ensureLandingDemoWorker() {
   const slug = "ahmed-almutairi";
   const existing = await getWorkerBySlug(slug);
-  if (existing) {
-    if (
-      existing.isDemo &&
-      (/^Worker No\.\s*\d+$/i.test(existing.name) ||
-        /^الموظف رقم [٠-٩0-9]+$/.test(existing.arabicName ?? ""))
-    ) {
-      await updateWorker(existing.id, {
-        name: "Ahmed Almutairi",
-        arabicName: "أحمد المطيري",
-      });
-    }
-    return;
-  }
+  if (existing) return;
 
   let company = await getCompanyByNameAndDemo("SANAD Demo", true);
   if (!company) {
@@ -585,8 +573,8 @@ async function ensureLandingDemoWorker() {
       clerkUserId: null,
       clerkInvitationId: null,
       slug,
-      name: "Ahmed Almutairi",
-      arabicName: "أحمد المطيري",
+      name: "Demo worker 1",
+      arabicName: "موظف تجريبي ١",
       email: null,
       phoneNumber: null,
       workerPasswordHash: null,

@@ -144,11 +144,9 @@ export async function initializeMongoStore(): Promise<{
 }
 
 export async function normalizeDemoWorkerNames(): Promise<number> {
-  if (process.env.NODE_ENV === "production") return 0;
-
   const workersCollection = await collection("workers");
   const demoWorkers = await workersCollection
-    .find({ isDemo: true, slug: { $ne: "ahmed-almutairi" } })
+    .find({ isDemo: true })
     .project<{
       id: string;
       companyId: string;
@@ -169,8 +167,8 @@ export async function normalizeDemoWorkerNames(): Promise<number> {
       /\d/g,
       (digit) => arabicDigits[Number(digit)] ?? digit,
     );
-    const name = `Worker No. ${ordinal}`;
-    const arabicName = `الموظف رقم ${arabicOrdinal}`;
+    const name = `Demo worker ${ordinal}`;
+    const arabicName = `موظف تجريبي ${arabicOrdinal}`;
 
     if (worker.name === name && worker.arabicName === arabicName) continue;
 
@@ -231,8 +229,8 @@ export async function normalizeDemoCompanyTransactionSamples(): Promise<{
         clerkUserId: null,
         clerkInvitationId: null,
         slug: `worker-no-${ordinal}-${randomUUID().slice(0, 8)}`,
-        name: `Worker No. ${ordinal}`,
-        arabicName: `الموظف رقم ${arabicOrdinal}`,
+        name: `Demo worker ${ordinal}`,
+        arabicName: `موظف تجريبي ${arabicOrdinal}`,
         email: null,
         phoneNumber: null,
         workerPasswordHash: null,

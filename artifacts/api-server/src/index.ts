@@ -32,7 +32,7 @@ async function startServer(): Promise<void> {
     if (renamedDemoWorkers > 0) {
       logger.info(
         { renamedDemoWorkers },
-        "Updated development demo worker names",
+        "Updated demo worker names",
       );
     }
     if (demoSampleUpdates.addedWorkers > 0 || demoSampleUpdates.reassignedTips > 0) {
