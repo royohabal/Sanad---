@@ -5,6 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface CompanyDemoSetupRequest {
+  confirm: true;
+}
+
+export interface CompanyDemoWorkerSessionRequest { [key: string]: unknown }
+
 export interface HealthStatus {
   status: string;
 }
@@ -524,6 +530,15 @@ export interface CompanyReport {
   transactionCount: number;
   isDemo: boolean;
 }
+
+export type SetupCompanyDemo200 = {
+  workerCount: number;
+  alreadyConfigured: boolean;
+};
+
+export type OpenCompanyDemoWorkerSession200 = {
+  isDemo: true;
+};
 
 export type GetCompanyReportParams = {
 /**

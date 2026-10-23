@@ -21,15 +21,19 @@ import type {
 
 import type {
   CompanyDashboard,
+  CompanyDemoSetupRequest,
+  CompanyDemoWorkerSessionRequest,
   CompanyProfile,
   CompanyProfileInput,
   CompanyReport,
   GetCompanyReportParams,
   HealthStatus,
+  OpenCompanyDemoWorkerSession200,
   PayoutInput,
   PayoutRecord,
   PayoutStatusInput,
   PublicWorker,
+  SetupCompanyDemo200,
   TemporaryPasswordResponse,
   TipCheckoutInput,
   TipCheckoutResponse,
@@ -1956,6 +1960,183 @@ export const useUpdateCompanyWorker = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateCompanyWorkerMutationOptions(options));
+    }
+
+export const getSetupCompanyDemoUrl = () => {
+
+
+
+
+  return `/api/company/demo-setup`
+}
+
+/**
+ * @summary Explicitly add an insert-only demo team to an empty company workspace
+ */
+export const setupCompanyDemo = async (companyDemoSetupRequest: CompanyDemoSetupRequest, options?: Parameters<typeof customFetch>[1]): Promise<SetupCompanyDemo200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SetupCompanyDemo200>(getSetupCompanyDemoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companyDemoSetupRequest)
+  }
+);}
+
+
+
+
+
+export const getSetupCompanyDemoMutationKey = () => ['setupCompanyDemo'] as const;
+
+export const getSetupCompanyDemoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupCompanyDemo>>, TError,SetupCompanyDemoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setupCompanyDemo>>, TError,SetupCompanyDemoMutationVariables, TContext> => {
+
+const mutationKey = getSetupCompanyDemoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setupCompanyDemo>>, SetupCompanyDemoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  setupCompanyDemo(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetupCompanyDemoMutationResult = NonNullable<Awaited<ReturnType<typeof setupCompanyDemo>>>
+    export type SetupCompanyDemoMutationBody = BodyType<CompanyDemoSetupRequest>
+    export type SetupCompanyDemoMutationError = ErrorType<void>
+    export type SetupCompanyDemoMutationVariables = {data: BodyType<CompanyDemoSetupRequest>}
+
+    /**
+ * @summary Explicitly add an insert-only demo team to an empty company workspace
+ */
+export const useSetupCompanyDemo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupCompanyDemo>>, TError,SetupCompanyDemoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setupCompanyDemo>>,
+        TError,
+        SetupCompanyDemoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetupCompanyDemoMutationOptions(options));
+    }
+
+export const getOpenCompanyDemoWorkerSessionUrl = (workerId: string,) => {
+
+
+
+
+  return `/api/company/workers/${workerId}/demo-session`
+}
+
+/**
+ * @summary Open a 30-minute session for an active demo worker owned by this company
+ */
+export const openCompanyDemoWorkerSession = async (workerId: string,
+    companyDemoWorkerSessionRequest: CompanyDemoWorkerSessionRequest, options?: Parameters<typeof customFetch>[1]): Promise<OpenCompanyDemoWorkerSession200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OpenCompanyDemoWorkerSession200>(getOpenCompanyDemoWorkerSessionUrl(workerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companyDemoWorkerSessionRequest)
+  }
+);}
+
+
+
+
+
+export const getOpenCompanyDemoWorkerSessionMutationKey = () => ['openCompanyDemoWorkerSession'] as const;
+
+export const getOpenCompanyDemoWorkerSessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>, TError,OpenCompanyDemoWorkerSessionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>, TError,OpenCompanyDemoWorkerSessionMutationVariables, TContext> => {
+
+const mutationKey = getOpenCompanyDemoWorkerSessionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>, OpenCompanyDemoWorkerSessionMutationVariables> = (props) => {
+          const {workerId,data} = props ?? {};
+
+          return  openCompanyDemoWorkerSession(workerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type OpenCompanyDemoWorkerSessionMutationResult = NonNullable<Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>>
+    export type OpenCompanyDemoWorkerSessionMutationBody = BodyType<CompanyDemoWorkerSessionRequest>
+    export type OpenCompanyDemoWorkerSessionMutationError = ErrorType<void>
+    export type OpenCompanyDemoWorkerSessionMutationVariables = {workerId: string;data: BodyType<CompanyDemoWorkerSessionRequest>}
+
+    /**
+ * @summary Open a 30-minute session for an active demo worker owned by this company
+ */
+export const useOpenCompanyDemoWorkerSession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>, TError,OpenCompanyDemoWorkerSessionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof openCompanyDemoWorkerSession>>,
+        TError,
+        OpenCompanyDemoWorkerSessionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getOpenCompanyDemoWorkerSessionMutationOptions(options));
     }
 
 export const getListCompanyTransactionsUrl = () => {

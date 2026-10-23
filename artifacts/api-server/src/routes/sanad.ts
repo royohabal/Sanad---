@@ -551,6 +551,7 @@ async function seedDemoCompany(companyId: string, actorId: string) {
 }
 
 async function ensureLandingDemoWorker() {
+  if (!isDevelopment) return;
   const slug = "ahmed-almutairi";
   const existing = await getWorkerBySlug(slug);
   if (existing) return;
@@ -1464,14 +1465,15 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
   }
   const workers = await getWorkersByCompany(company.id);
   const workerIds = workers.map((worker) => worker.id);
-  const tipStatuses = tipStatusesForAccount(company.isDemo);
+  const demoWorkspace = company.isDemo || (workers.length > 0 && workers.every(worker => worker.isDemo));
+  const tipStatuses = tipStatusesForAccount(demoWorkspace);
   const month = currentMonth();
   const [received, paid, monthTips, transactions, monthlyRows] = await Promise.all([
     sumTipsForWorkerRows(workers),
     sumPayoutsForWorkerRows(workers, "paid"),
     sumTipsForWorkerRows(workers, monthRange(month)),
     companyTransactionRows(company.id, 6),
-    monthlyTipsForCompany(company.id, tipStatuses, company.isDemo),
+    monthlyTipsForCompany(company.id, tipStatuses, demoWorkspace),
   ]);
   const profile = {
     id: company.id,
@@ -1490,7 +1492,7 @@ router.get("/company/dashboard", async (req, res): Promise<void> => {
       monthTipsFils: monthTips,
       monthly: monthlyRows,
       recentTransactions: transactions.map(toTransaction),
-      isDemo: company.isDemo,
+      isDemo: demoWorkspace,
     }),
   );
 });
@@ -1900,6 +1902,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
   const workers = await getWorkersByCompany(membership.companyId);
   const workerIds = workers.map((worker) => worker.id);
   const range = monthRange(params.data.month);
+  const demoWorkspace = company.isDemo || (workers.length > 0 && workers.every(worker => worker.isDemo));
   const [tipsFils, payouts, transactions] = await Promise.all([
     sumTipsForWorkerRows(workers, range),
     companyPayoutRows(membership.companyId, workerIds).then((rows) => {
@@ -1917,7 +1920,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
         (row) =>
           row.createdAt >= range.from &&
           row.createdAt < range.to &&
-          (company.isDemo || row.status === "succeeded"),
+          (demoWorkspace || row.status === "succeeded"),
       ),
     ),
   ]);
@@ -1932,7 +1935,7 @@ router.get("/company/reports", async (req, res): Promise<void> => {
     paidOutFils,
     workerCount: new Set(transactions.map((transaction) => transaction.workerId)).size,
     transactionCount: transactions.length,
-    isDemo: company.isDemo,
+    isDemo: demoWorkspace,
   };
   res.json(GetCompanyReportResponse.parse(report));
 });

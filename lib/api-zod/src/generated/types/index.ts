@@ -7,18 +7,22 @@
  */
 
 export * from './companyDashboard';
+export * from './companyDemoSetupRequest';
+export * from './companyDemoWorkerSessionRequest';
 export * from './companyProfile';
 export * from './companyProfileInput';
 export * from './companyReport';
 export * from './getCompanyReportParams';
 export * from './healthStatus';
 export * from './monthlyValue';
+export * from './openCompanyDemoWorkerSession200';
 export * from './payoutInput';
 export * from './payoutRecord';
 export * from './payoutRecordStatus';
 export * from './payoutStatusInput';
 export * from './payoutStatusInputStatus';
 export * from './publicWorker';
+export * from './setupCompanyDemo200';
 export * from './temporaryPasswordResponse';
 export * from './tipCheckoutInput';
 export * from './tipCheckoutResponse';

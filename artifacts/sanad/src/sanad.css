@@ -494,6 +494,8 @@ html[dir="rtl"] .side-link-button { text-align:right; }
 .company-demo-payout-person small { margin-top:4px;color:#806E66;font-size:8px; }
 .company-demo-payout-amount { color:#3B1720;font-size:10px;font-weight:800;white-space:nowrap; }
 .company-demo-section { margin-top:17px; }
+.demo-setup-confirm { display:flex;align-items:flex-start;gap:9px;margin:16px 0;font-size:12px;line-height:1.6; }
+.demo-setup-confirm input { margin-top:4px;accent-color:#581C2B; }
 .company-demo-caption { margin:6px 0 0;color:#806E66;font-size:9px;line-height:1.55; }
 .company-demo-worker-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
 .company-demo-worker-card { min-width:0;padding:13px;border:1px solid #E8DAC8;border-radius:13px;background:#FFF9F2; }

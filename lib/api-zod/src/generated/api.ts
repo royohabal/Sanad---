@@ -532,6 +532,35 @@ export const UpdateCompanyWorkerResponse = zod.object({
 
 
 /**
+ * @summary Explicitly add an insert-only demo team to an empty company workspace
+ */
+export const SetupCompanyDemoBody = zod.object({
+  "confirm": zod.literal(true)
+})
+
+export const SetupCompanyDemoResponse = zod.object({
+  "workerCount": zod.number().int(),
+  "alreadyConfigured": zod.boolean()
+})
+
+
+/**
+ * @summary Open a 30-minute session for an active demo worker owned by this company
+ */
+export const OpenCompanyDemoWorkerSessionParams = zod.object({
+  "workerId": zod.coerce.string().uuid()
+})
+
+export const OpenCompanyDemoWorkerSessionBody = zod.object({
+
+})
+
+export const OpenCompanyDemoWorkerSessionResponse = zod.object({
+  "isDemo": zod.literal(true)
+})
+
+
+/**
  * @summary List company tip transactions
  */
 export const ListCompanyTransactionsResponseItem = zod.object({

@@ -453,6 +453,72 @@ paths:
           description: Authentication required
         "404":
           description: Worker not found
+  /company/demo-setup:
+    post:
+      operationId: setupCompanyDemo
+      tags: [company]
+      security: [{ clerkSession: [] }]
+      summary: Explicitly add an insert-only demo team to an empty company workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyDemoSetupRequest" }
+      responses:
+        "200":
+          description: Demo team created or existing demo team reused without duplicates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workerCount, alreadyConfigured]
+                properties:
+                  workerCount: { type: integer }
+                  alreadyConfigured: { type: boolean }
+        "400":
+          description: Explicit confirmation required
+        "401":
+          description: Authentication required
+        "403":
+          description: Company administrator access required
+        "404":
+          description: Company not found
+        "409":
+          description: Real workers or a conflicting record prevent demo setup
+        "503":
+          description: Setup unavailable; insert-only operation is safe to retry
+  /company/workers/{workerId}/demo-session:
+    post:
+      operationId: openCompanyDemoWorkerSession
+      tags: [company]
+      security: [{ clerkSession: [] }]
+      summary: Open a 30-minute session for an active demo worker owned by this company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyDemoWorkerSessionRequest" }
+      parameters:
+        - in: path
+          name: workerId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: HttpOnly demo worker session cookie created; credentials are unchanged
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [isDemo]
+                properties:
+                  isDemo: { type: boolean, enum: [true] }
+        "400":
+          description: Same-origin JSON request required
+        "401":
+          description: Authentication required
+        "403":
+          description: Not an owned active demo worker
   /company/transactions:
     get:
       operationId: listCompanyTransactions
@@ -559,6 +625,14 @@ components:
       in: cookie
       name: sanad_worker_session
   schemas:
+    CompanyDemoSetupRequest:
+      type: object
+      required: [confirm]
+      properties:
+        confirm: { type: boolean, enum: [true] }
+    CompanyDemoWorkerSessionRequest:
+      type: object
+      additionalProperties: false
     HealthStatus:
       type: object
       properties:

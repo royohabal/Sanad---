@@ -31,6 +31,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import { CompanyDemoSetup } from '@/components/company-demo-setup';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -80,6 +81,7 @@ const kuwaitMonth = () => {
 };
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 function firstName(name: string) {
+  if (/^Demo worker \d+$/i.test(name.trim()) || /^موظف تجريبي/.test(name.trim())) return name.trim();
   return name.trim().split(/\s+/)[0] || name;
 }
 function getSessionValue(key: string) {
@@ -662,6 +664,7 @@ function TipPage() {
     }, {
       onSuccess: (result) => {
         setSimulationResult({ amountFils: result.amountFils, rating: result.rating, savedAsDemo: true });
+        void queryClient.invalidateQueries();
         setQuote(null);
         setPreparedCheckout(null);
       },
@@ -811,7 +814,7 @@ function TipPage() {
         {notice && <div className="form-notice" role="alert">{notice[language]}</div>}
         <div className="tip-actions">
           {(checkoutEnabled || !canSimulateTip) && <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending || simulateTip.isPending}>{!checkoutEnabled ? (ar ? 'الدفع غير متاح' : 'Checkout unavailable') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>}
-          {canSimulateTip && <PillButton data-testid="button-simulate-tip" className={checkoutEnabled ? 'simulate-tip' : 'submit-tip'} onClick={submitSimulation} disabled={simulateTip.isPending}>{simulateTip.isPending ? (worker.isDemo ? (ar ? 'جارٍ حفظ الإكرامية التجريبية…' : 'Saving demo tip…') : (ar ? 'جارٍ حفظ المحاكاة…' : 'Saving simulation…')) : (worker.isDemo ? (ar ? 'حفظ إكرامية تجريبية' : 'Save demo tip') : (ar ? 'محاكاة الإكرامية' : 'Simulate tip'))} {!simulateTip.isPending && <Sparkles size={16}/>}</PillButton>}
+          {canSimulateTip && <PillButton data-testid="button-simulate-tip" className={checkoutEnabled ? 'simulate-tip' : 'submit-tip'} onClick={submitSimulation} disabled={simulateTip.isPending}>{simulateTip.isPending ? (ar ? 'جارٍ حفظ الإكرامية التجريبية…' : 'Saving demo tip…') : (ar ? 'محاكاة الإكرامية' : 'Simulate Tip')} {!simulateTip.isPending && <Sparkles size={16}/>}</PillButton>}
         </div>
       </form>}
     </>}
@@ -872,11 +875,12 @@ function PortalLayout({ children, company = false, title = 'Overview' }: { child
     {mobileNav && <button aria-label="Close navigation" className="nav-backdrop" onClick={()=>setMobileNav(false)}/>}
     <div className="portal-main"><header className="portal-header"><button className="mobile-menu" onClick={()=>setMobileNav(true)} aria-label="Open menu" aria-expanded={mobileNav} aria-controls="portal-navigation"><Menu/></button><div><span className="breadcrumb">SANAD <ChevronRight size={12}/> {company?'COMPANY':'WORKER'}</span><h1>{localized(title,language)}</h1></div><div className="portal-header-tools"><LanguageToggle/><div className="top-user">{initials(accountName)}</div></div></header>
       <main className="portal-content">
+        {company && companyAccount.data && currentPath === '/company' && <CompanyDemoSetup arabic={language === 'ar'} basePath={basePath}/>}
         {children}
-        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/workers' && <CompanyDemoExamples section="workers"/>}
-        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/transactions' && <CompanyDemoExamples section="transactions"/>}
-        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/payouts' && <CompanyDemoExamples section="payouts"/>}
-        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/reports' && <CompanyDemoExamples section="reports"/>}
+        {company && companyAccount.data && !companyAccount.data.isDemo && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/workers' && <CompanyDemoExamples section="workers"/>}
+        {company && companyAccount.data && !companyAccount.data.isDemo && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/transactions' && <CompanyDemoExamples section="transactions"/>}
+        {company && companyAccount.data && !companyAccount.data.isDemo && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/payouts' && <CompanyDemoExamples section="payouts"/>}
+        {company && companyAccount.data && !companyAccount.data.isDemo && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/reports' && <CompanyDemoExamples section="reports"/>}
       </main>
     </div>
   </div></LocalizedTree>;

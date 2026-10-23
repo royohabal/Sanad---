@@ -95,8 +95,9 @@ export async function createWorkerSession(
   res: Response,
   workerId: string,
   state: WorkerSessionState,
+  durationMs?: number,
 ): Promise<void> {
-  const lifetime = state === "password_setup" ? SETUP_SESSION_MS : ACTIVE_SESSION_MS;
+  const lifetime = durationMs ?? (state === "password_setup" ? SETUP_SESSION_MS : ACTIVE_SESSION_MS);
   const expiresAt = new Date(Date.now() + lifetime);
   const token = randomBytes(32).toString("base64url");
   await createWorkerAuthSession({

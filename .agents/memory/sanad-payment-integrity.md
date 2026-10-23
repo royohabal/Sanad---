@@ -20,3 +20,9 @@ On public production worker pages, a non-demo worker may offer a local simulated
 **Why:** the public Vercel demo needs a simulation action for real worker pages without introducing fake production tips.
 
 **How to apply:** use browser-only state for non-demo production workers; do not call the persisted simulation endpoint unless the worker record is explicitly marked demo.
+
+The university demonstration needs an explicit, safe production demo setup and saved simulations that update the appropriate demo totals/recent tips. Never copy development data into production automatically or seed duplicate records on deployment. Do not overwrite real workers, credentials, or payment records to make a demo account.
+
+**Why:** the user requested the same intended demo experience on Vercel while protecting existing production data and keeping simulated tips distinct from real Stripe payments.
+
+**How to apply:** require a company administrator's explicit opt-in in an empty/demo-only workspace; keep demo identities and activity labeled, retry-safe, and separate from real records. Provide demo access without shared credentials or access to real worker accounts.
