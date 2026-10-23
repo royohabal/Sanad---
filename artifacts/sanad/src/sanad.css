@@ -482,8 +482,8 @@ html[dir="rtl"] .side-link-button { text-align:right; }
 .simulation-details strong { color:#3B1720;font-size:11px;text-align:end; }
 .tip-profile .tip-beneficiary { max-width:360px;margin:0;font-size:9px;line-height:1.65; }
 .demo-callout { line-height:1.55;text-align:center; }
-.company-demo-preview-note { justify-content:flex-start;gap:10px;margin:0 0 15px;padding:12px 15px;text-align:start; }
-.company-demo-preview-note svg { flex:0 0 auto; }
+.company-demo-preview-note,.worker-demo-preview-note { justify-content:flex-start;gap:10px;margin:0 0 15px;padding:12px 15px;text-align:start; }
+.company-demo-preview-note svg,.worker-demo-preview-note svg { flex:0 0 auto; }
 .company-demo-payouts { margin-top:14px; }
 .company-demo-payout-caption { margin:5px 0 0;color:#806E66;font-size:9px;line-height:1.5; }
 .company-demo-payout-list { margin-top:3px; }

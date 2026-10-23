@@ -25,7 +25,7 @@ import {
   useChangeWorkerPassword, useWorkerLogout, useIssueWorkerTemporaryPassword,
   uploadWorkerProfilePhoto, uploadCompanyWorkerPhoto
 } from '@workspace/api-client-react';
-import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse, TipSimulationResponse } from '@workspace/api-client-react';
+import type { PayoutRecord, TipTransaction, TipQuote, TipCheckoutResponse } from '@workspace/api-client-react';
 import { MAX_TIP_AMOUNT_FILS, MIN_TIP_AMOUNT_FILS, parseKwdAmount } from './lib/tipAmount';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -504,7 +504,7 @@ function Landing() {
     <section id="for-business" className="business-section landing-business landing-reveal"><div className="business-copy"><div className="eyebrow">{ar ? 'للشركات' : 'FOR COMPANIES'}</div><h2>{ar ? <>تقدير أوضح،<br/>لفريقك.</> : <>A clearer way<br/>to value <em>your team.</em></>}</h2><ul><li><BadgeCheck/>{ar ? 'رموز QR شخصية لكل موظف' : 'Personal QR badges for every worker'}</li><li><BadgeCheck/>{ar ? 'سجلات واضحة للإكراميات والرواتب' : 'Clear tip and payroll records'}</li></ul><Link href="/sign-up" className="business-link" data-testid="link-company-signup">{ar ? 'إنشاء حساب شركة' : 'Create a company account'} <ArrowUpRight size={16}/></Link></div>
        <div className="business-panel business-panel-simple company-preview"><div className="panel-topline"><span>{ar ? 'معاينة لوحة الشركة' : 'COMPANY PREVIEW'}</span><span className="preview-tag">{ar ? 'بيانات نموذجية' : 'SAMPLE DATA'}</span></div><div className="company-preview-content"><div className="sample-badge"><span className="sample-badge-brand">سند</span><QrGraphic/><strong>{ar ? 'موظف تجريبي ١' : 'Demo worker 1'}</strong><small>{ar ? 'موظف خدمة · معاينة' : 'Service team · Preview'}</small></div><div className="sample-dashboard"><span className="sample-dash-title">{ar ? 'نظرة عامة للفريق' : 'TEAM OVERVIEW'} <small>{ar ? 'معاينة' : 'PREVIEW'}</small></span><strong>KWD 84.250</strong><span className="sample-caption">{ar ? 'إكراميات هذا الشهر · بيانات نموذجية' : 'Tips this month · sample only'}</span><div className="sample-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/></div><div className="sample-worker"><span className="sample-initials">D1</span><span><b>{ar ? 'موظف تجريبي ١' : 'Demo worker 1'}</b><small>{ar ? 'رمز شخصي نشط' : 'Personal badge active'}</small></span><Check size={14}/></div></div></div><Link href="/sign-up" className="preview-signup" data-testid="link-company-preview-signup">{ar ? 'ابدأ بإعداد فريقك' : 'Set up your team'} <ArrowUpRight size={14}/></Link></div>
     </section>
-     <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'جرّب محاكاة إكرامية محفوظة. لا يتم إجراء دفع أو تحويل مبلغ حقيقي.' : 'Try a saved tip simulation. No payment or real payout is made.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
+      <section id="tip-now" className="landing-tip-band landing-reveal"><div className="guest-intro"><span className="eyebrow">{ar ? 'للضيوف' : 'FOR GUESTS'}</span><h2>{ar ? 'امسح رمز الموظف للبدء.' : 'Scan a worker’s QR badge to begin.'}</h2><p>{publicDemo ? publicTestCheckout ? (ar ? 'جرّب الدفع ببطاقة Stripe تجريبية؛ لن يتم تحصيل مبلغ حقيقي.' : 'Try checkout with a Stripe test card. No real charge will be made.') : (ar ? 'جرّب محاكاة إكرامية. لا يتم حفظ سجل أو إجراء دفع حقيقي.' : 'Try a tip simulation. No tip record is saved and no payment is made.') : (ar ? 'جرّب المعاينة، أو أرسل إكرامية حقيقية من صفحة الموظف.' : 'Try the preview, or send a real tip from a worker’s page.')}</p></div>
       <div className="tip-demo" aria-live="polite">
         <div className="demo-heading"><div><span className="demo-label">{ar ? 'معاينة تفاعلية' : 'INTERACTIVE PREVIEW'}</span>{!ar&&<strong>Try a little thank you</strong>}</div><span className="demo-only">{ar ? 'عرض فقط · لا يوجد دفع' : 'DEMO ONLY · NO PAYMENT'}</span></div>
         {demoComplete ? <div className="demo-success"><span className="demo-success-icon"><Check size={20}/></span><div><strong>{ar ? 'معاينتك جاهزة.' : 'Your preview is ready.'}</strong><span data-testid="text-demo-confirmation">{ar ? `المبلغ KWD ${demoAmounts[demoAmount]}${demoRating ? ` · التقييم ${demoRating}/5` : ''}. لا يوجد دفع أو حفظ بيانات.` : `KWD ${demoAmounts[demoAmount]}${demoRating ? ` · ${demoRating}/5 rating` : ''}. Preview only; no payment or data saved.`}</span></div><button type="button" data-testid="button-demo-reset" onClick={() => setDemoComplete(false)}>{ar ? 'جرّب مرة أخرى' : 'Try again'}</button></div> : <>
@@ -553,10 +553,13 @@ function TipPage() {
   const slug = params?.slug ?? '';
   const { language } = useLanguage();
   const ar = language === 'ar';
+  const publicDemo = import.meta.env.PROD;
   const checkoutEnabled = stripeTestCheckoutEnabled;
-  const publicTestCheckout = import.meta.env.PROD && checkoutEnabled;
+  const publicTestCheckout = publicDemo && checkoutEnabled;
   const workerQuery = useGetPublicWorker(slug, { query: { enabled: !!slug, queryKey: getGetPublicWorkerQueryKey(slug) } });
   const worker = workerQuery.data;
+  const localPublicSimulation = publicDemo && Boolean(worker && !worker.isDemo);
+  const canSimulateTip = Boolean(worker?.isDemo || localPublicSimulation);
   const isLoading = workerQuery.isLoading;
   const isError = workerQuery.isError;
   const refetch = workerQuery.refetch;
@@ -569,7 +572,7 @@ function TipPage() {
   const [quote, setQuote] = useState<TipQuote | null>(null);
   const [quoteRating, setQuoteRating] = useState<number | null>(null);
   const [preparedCheckout, setPreparedCheckout] = useState<TipCheckoutResponse | null>(null);
-  const [simulationResult, setSimulationResult] = useState<TipSimulationResponse | null>(null);
+  const [simulationResult, setSimulationResult] = useState<{ amountFils: number; rating: number | null; savedAsDemo: boolean } | null>(null);
   const [notice, setNotice] = useState<{ en: string; ar: string } | null>(() =>
     new URLSearchParams(window.location.search).get('checkout') === 'cancelled'
       ? { en: 'Checkout was cancelled. No payment was confirmed.', ar: 'تم إلغاء الدفع. لم يتم تأكيد أي مبلغ.' }
@@ -632,7 +635,7 @@ function TipPage() {
   };
   const submitSimulation = () => {
     setNotice(null);
-    if (!worker?.isDemo) {
+    if (!worker?.isDemo && !localPublicSimulation) {
       showNotice('Simulation is available only on demo worker pages.', 'المحاكاة متاحة لصفحات العرض التجريبي فقط.');
       return;
     }
@@ -648,11 +651,17 @@ function TipPage() {
       showNotice('The maximum tip is KWD 100.000.', 'الحد الأقصى للإكرامية هو KWD 100.000.');
       return;
     }
+    if (localPublicSimulation) {
+      setSimulationResult({ amountFils, rating, savedAsDemo: false });
+      setQuote(null);
+      setPreparedCheckout(null);
+      return;
+    }
     simulateTip.mutate({
       data: { workerSlug: slug, amountFils, rating, requestId: simulationRequestId() },
     }, {
       onSuccess: (result) => {
-        setSimulationResult(result);
+        setSimulationResult({ amountFils: result.amountFils, rating: result.rating, savedAsDemo: true });
         setQuote(null);
         setPreparedCheckout(null);
       },
@@ -732,6 +741,10 @@ function TipPage() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setNotice(null);
     if (!checkoutEnabled) {
+      if (canSimulateTip) {
+        submitSimulation();
+        return;
+      }
       showNotice('Checkout is disabled in this public demo. No tip was saved.', 'الدفع معطل في هذا العرض العام. لم يتم حفظ أي إكرامية.');
       return;
     }
@@ -773,10 +786,12 @@ function TipPage() {
       <div className="tip-profile"><Avatar name={ar && worker.arabicName ? worker.arabicName : worker.name} photo={worker.photoUrl} size="lg"/><span className="tip-brandline">{worker.companyName}</span><h1>{firstName(ar && worker.arabicName ? worker.arabicName : worker.name)}</h1>{ar && worker.arabicName && <span className="arabic tip-arabic" dir="rtl">{worker.name}</span>}<p>{localized(worker.role, language)}{worker.branch ? ` · ${localized(worker.branch, language)}` : ''}</p><p className="tip-beneficiary">{ar ? <>يتم تسجيل ١٠٠٪ من إكراميتك باسم {firstName(worker.arabicName || worker.name)}.</> : <>100% of your tip is recorded for {firstName(worker.name)}.</>}</p></div>
       {simulationResult ? <section className="simulation-success" role="status" aria-live="polite">
         <span className="simulation-success-icon"><Check size={23}/></span>
-        <span className="eyebrow">{ar ? 'إكرامية تجريبية' : 'SIMULATED TIP'}</span>
+        <span className="eyebrow">{simulationResult.savedAsDemo ? (ar ? 'تم حفظ إكرامية تجريبية' : 'DEMO TIP SAVED') : (ar ? 'معاينة إكرامية' : 'TIP SIMULATION PREVIEW')}</span>
         <h2>{ar ? `وصلت رسالة شكرك إلى ${firstName(worker.arabicName || worker.name)}` : `${firstName(worker.name)} received your thank you`}</h2>
-        <p>{ar ? 'تم حفظ الإكرامية التجريبية. لم يتم إجراء أي دفع أو تحويل مبلغ حقيقي.' : 'Your simulated tip was saved. No payment was made and no real payout occurred.'}</p>
-        <div className="simulation-details"><span>{ar ? 'المبلغ' : 'Simulated amount'}</span><strong>{money(simulationResult.amountFils)}</strong>{simulationResult.rating != null && <><span>{ar ? 'التقييم' : 'Rating'}</span><strong>{simulationResult.rating} / 5</strong></>}</div>
+        <p>{simulationResult.savedAsDemo
+          ? ar ? 'تم حفظ الإكرامية كبيانات تجريبية. لم يتم الدفع أو تحويل أي مبلغ حقيقي.' : 'Your simulated tip was saved as demo data. No payment or real payout occurred.'
+          : ar ? 'هذه معاينة محلية فقط. لم يتم حفظ إكرامية أو إجراء أي دفع حقيقي.' : 'This was a local preview only. No tip record was saved and no payment was made.'}</p>
+        <div className="simulation-details"><span>{simulationResult.savedAsDemo ? (ar ? 'مبلغ الإكرامية التجريبية' : 'Demo tip amount') : (ar ? 'المبلغ المحاكى' : 'Simulated amount')}</span><strong>{money(simulationResult.amountFils)}</strong>{simulationResult.rating != null && <><span>{ar ? 'التقييم' : 'Rating'}</span><strong>{simulationResult.rating} / 5</strong></>}</div>
         <PillButton className="submit-tip" onClick={() => { setSimulationResult(null); setAmount(null); setCustom(''); setRating(null); clearReview(); removeSessionValue('sanad-simulation-request'); }}>{ar ? 'جرّب مرة أخرى' : 'Try another simulated tip'}</PillButton>
       </section> : <form onSubmit={submit} className="tip-form">
         <label className="form-label">{ar ? 'مبلغ الإكرامية' : 'Tip amount'} <small>KWD</small></label>
@@ -791,11 +806,12 @@ function TipPage() {
         </section>}
         {worker.isDemo && <div className="demo-callout" role="status">{ar ? 'محاكاة فقط · تُحفظ كبيانات تجريبية ولا يتم الدفع أو تحويل أموال حقيقية.' : 'Simulation only · saved as demo data; no payment or real payout occurs.'}</div>}
         {checkoutEnabled && <div className="secure-tip"><ShieldCheck size={16}/><span>{ar ? 'دفع Stripe تجريبي آمن · لا يتم خصم مبلغ حقيقي.' : 'Secure Stripe test checkout · no real charge.'}</span></div>}
-        {!checkoutEnabled && !worker.isDemo && <div className="demo-callout" role="status">{ar ? 'الدفع غير متاح في هذا العرض العام. لم يتم حفظ أي إكرامية.' : 'Checkout is unavailable in this public demo. No tip was saved.'}</div>}
+        {localPublicSimulation && <div className="demo-callout" role="status">{ar ? 'محاكاة للعرض فقط · لا يتم الدفع أو حفظ سجل إكرامية.' : 'Public demo simulation only · no payment or tip record will be saved.'}</div>}
+        {!checkoutEnabled && !worker.isDemo && !localPublicSimulation && <div className="demo-callout" role="status">{ar ? 'الدفع غير متاح في هذا العرض العام. لم يتم حفظ أي إكرامية.' : 'Checkout is unavailable in this public demo. No tip was saved.'}</div>}
         {notice && <div className="form-notice" role="alert">{notice[language]}</div>}
         <div className="tip-actions">
-          <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending || simulateTip.isPending}>{!checkoutEnabled ? (ar ? 'الدفع غير متاح' : 'Checkout unavailable') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>
-          {worker.isDemo && <PillButton className="simulate-tip" onClick={submitSimulation} disabled={simulateTip.isPending}>{simulateTip.isPending ? (ar ? 'جارٍ حفظ المحاكاة…' : 'Saving simulation…') : (ar ? 'محاكاة الإكرامية' : 'Simulate tip')} {!simulateTip.isPending && <Sparkles size={16}/>}</PillButton>}
+          {(checkoutEnabled || !canSimulateTip) && <PillButton type="submit" className="submit-tip" disabled={!checkoutEnabled || quoteMutation.isPending || checkout.isPending || simulateTip.isPending}>{!checkoutEnabled ? (ar ? 'الدفع غير متاح' : 'Checkout unavailable') : quoteMutation.isPending ? (ar ? 'جارٍ إعداد المبلغ…' : 'Preparing amount…') : checkout.isPending ? (ar ? 'جارٍ تجهيز الدفع…' : 'Preparing checkout…') : preparedCheckout || hasCurrentQuote ? publicTestCheckout ? (ar ? 'متابعة إلى دفع Stripe التجريبي' : 'Continue to Stripe test checkout') : (ar ? 'متابعة إلى الدفع الآمن' : 'Continue to secure payment') : (ar ? 'مراجعة المبلغ' : 'Review amount')} {!checkoutEnabled ? <ShieldCheck size={17}/> : <ArrowUpRight size={17}/>}</PillButton>}
+          {canSimulateTip && <PillButton data-testid="button-simulate-tip" className={checkoutEnabled ? 'simulate-tip' : 'submit-tip'} onClick={submitSimulation} disabled={simulateTip.isPending}>{simulateTip.isPending ? (worker.isDemo ? (ar ? 'جارٍ حفظ الإكرامية التجريبية…' : 'Saving demo tip…') : (ar ? 'جارٍ حفظ المحاكاة…' : 'Saving simulation…')) : (worker.isDemo ? (ar ? 'حفظ إكرامية تجريبية' : 'Save demo tip') : (ar ? 'محاكاة الإكرامية' : 'Simulate tip'))} {!simulateTip.isPending && <Sparkles size={16}/>}</PillButton>}
         </div>
       </form>}
     </>}
@@ -876,20 +892,156 @@ function TransactionTable({ transactions, empty = 'Nothing to show yet.' }: { tr
   if (!transactions?.length) return <EmptyPanel title="No tips yet" text={empty}/>;
   return <LocalizedTree><div className="table-scroll"><table className="data-table transaction-table"><thead><tr><th>Guest / transaction</th><th>Amount received</th><th>Date received</th><th>Rating</th><th>Status</th></tr></thead><tbody>{transactions.map((tx)=> <tr key={tx.id} data-testid={`row-transaction-${tx.id}`}><td><div className="table-person"><span className="transaction-avatar"><Heart size={14}/></span><span><b>{tx.workerName}</b></span></div></td><td className="table-amount">{money(tx.amountFils)}</td><td>{dateLabel(tx.createdAt,language)}</td><td>{tx.rating ? <span className="rating-tag"><Star size={12} fill="currentColor"/> {tx.rating}.0</span> : '—'}</td><td><Badge status={tx.isDemo?'demo':tx.status}/></td></tr>)}</tbody></table></div></LocalizedTree>;
 }
+function isEmptyWorkerDashboard(data: { totalTipsFils: number; monthTipsFils: number; pendingTipsFils: number; paidTipsFils: number; ratingCount: number; recentTransactions: TipTransaction[] } | undefined) {
+  return Boolean(data && data.totalTipsFils === 0 && data.monthTipsFils === 0 && data.pendingTipsFils === 0 && data.paidTipsFils === 0 && data.ratingCount === 0 && data.recentTransactions.length === 0);
+}
+function isEmptyCompanyDashboard(data: { activeWorkers: number; totalTipsFils: number; monthTipsFils: number; pendingTipsFils: number; paidOutFils: number; recentTransactions: TipTransaction[] } | undefined) {
+  return Boolean(data && data.activeWorkers === 0 && data.totalTipsFils === 0 && data.monthTipsFils === 0 && data.pendingTipsFils === 0 && data.paidOutFils === 0 && data.recentTransactions.length === 0);
+}
+function DemoPreviewNotice({ language, testId = 'status-demo-preview' }: { language: Language; testId?: string }) {
+  return <div className="demo-callout company-demo-preview-note" role="status" data-testid={testId}>
+    <Sparkles size={15} aria-hidden="true"/>
+    <span>{language === 'ar'
+      ? 'معاينة بيانات تجريبية فقط. هذه الأمثلة غير محفوظة ولا تغيّر سجلات حسابك.'
+      : 'Demo preview only. These examples are not saved and do not change your account records.'}</span>
+  </div>;
+}
+function makeCompanyDemoTransactions(language: Language): TipTransaction[] {
+  const now = Date.now();
+  const rows = [
+    { worker: 1, amountFils: 500, rating: 4, hoursAgo: 2 },
+    { worker: 2, amountFils: 1000, rating: 5, hoursAgo: 7 },
+    { worker: 3, amountFils: 750, rating: 4, hoursAgo: 26 },
+    { worker: 4, amountFils: 500, rating: 5, hoursAgo: 48 },
+    { worker: 5, amountFils: 250, rating: 4, hoursAgo: 72 },
+    { worker: 6, amountFils: 1000, rating: 5, hoursAgo: 96 },
+  ];
+  return rows.map((row) => ({
+    id: `company-preview-tip-${row.worker}`,
+    workerId: `company-preview-worker-${row.worker}`,
+    workerName: demoWorkerName(row.worker, language),
+    amountFils: row.amountFils,
+    currency: 'KWD',
+    status: 'demo',
+    rating: row.rating,
+    createdAt: new Date(now - row.hoursAgo * 60 * 60 * 1000).toISOString(),
+    isDemo: true,
+  }));
+}
+function makeWorkerDemoTransactions(workerId: string, workerName: string): TipTransaction[] {
+  const now = Date.now();
+  const rows = [
+    { amountFils: 500, rating: 4, daysAgo: 0.1 },
+    { amountFils: 1000, rating: 5, daysAgo: 4 },
+    { amountFils: 750, rating: 4, daysAgo: 8 },
+    { amountFils: 1500, rating: 5, daysAgo: 20 },
+    { amountFils: 250, rating: 4, daysAgo: 35 },
+    { amountFils: 1000, rating: 5, daysAgo: 68 },
+  ];
+  return rows.map((row, index) => ({
+    id: `worker-preview-tip-${index + 1}`,
+    workerId,
+    workerName,
+    amountFils: row.amountFils,
+    currency: 'KWD',
+    status: 'demo',
+    rating: row.rating,
+    createdAt: new Date(now - row.daysAgo * 86400000).toISOString(),
+    isDemo: true,
+  }));
+}
+function monthAtOffset(month: string, offset: number) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const date = new Date(year, monthNumber - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+function demoMonthlyValues() {
+  const amounts = [500, 750, 1000, 1250, 2000, 3750];
+  return amounts.map((amountFils, index) => ({ month: monthAtOffset(kuwaitMonth(), index - amounts.length + 1), amountFils }));
+}
+function demoCompanyReport(month: string) {
+  const tips = [500, 750, 1000, 1250, 2000, 3750];
+  const paid = [0, 100, 150, 250, 500, 1000];
+  const transactions = [2, 2, 3, 4, 6, 12];
+  const [year, monthNumber] = month.split('-').map(Number);
+  const [currentYear, currentMonthNumber] = kuwaitMonth().split('-').map(Number);
+  const offset = (year - currentYear) * 12 + monthNumber - currentMonthNumber;
+  const index = tips.length - 1 + offset;
+  const tipsFils = index >= 0 && index < tips.length ? tips[index] : 0;
+  const paidOutFils = index >= 0 && index < paid.length ? paid[index] : 0;
+  return { month, tipsFils, paidOutFils, pendingFils: tipsFils - paidOutFils, workerCount: tipsFils ? 6 : 0, transactionCount: index >= 0 && index < transactions.length ? transactions[index] : 0, isDemo: true };
+}
+function makeDemoPayoutRecords(workers: { id: string; name: string }[], language: Language): PayoutRecord[] {
+  const records = [
+    { worker: 0, amountFils: 2000, status: 'paid' as const, daysAgo: 4 },
+    { worker: 1, amountFils: 1000, status: 'pending' as const, daysAgo: 2 },
+  ];
+  return records.map((record, index) => {
+    const worker = workers[record.worker] ?? workers[0] ?? { id: `demo-worker-${record.worker + 1}`, name: demoWorkerName(record.worker + 1, language) };
+    return {
+      id: `demo-preview-payout-${index + 1}`,
+      workerId: worker.id,
+      workerName: worker.name,
+      amountFils: record.amountFils,
+      month: kuwaitMonth(),
+      status: record.status,
+      recordedAt: new Date(Date.now() - record.daysAgo * 86400000).toISOString(),
+      note: language === 'ar' ? 'سجل رواتب تجريبي' : 'Sample payroll record',
+      isDemo: true,
+    };
+  });
+}
+function companyDemoWorkers(language: Language) {
+  const rows = [
+    { role: language === 'ar' ? 'مقدم خدمة' : 'Server', branch: language === 'ar' ? 'السالمية' : 'Salmiya', totalTipsFils: 2000 },
+    { role: language === 'ar' ? 'مضيف' : 'Host', branch: language === 'ar' ? 'مدينة الكويت' : 'Kuwait City', totalTipsFils: 1500 },
+    { role: language === 'ar' ? 'نادل' : 'Waiter', branch: language === 'ar' ? 'السالمية' : 'Salmiya', totalTipsFils: 1250 },
+    { role: language === 'ar' ? 'باريستا' : 'Barista', branch: language === 'ar' ? 'مدينة الكويت' : 'Kuwait City', totalTipsFils: 1500 },
+    { role: language === 'ar' ? 'مقدم خدمة' : 'Server', branch: language === 'ar' ? 'السالمية' : 'Salmiya', totalTipsFils: 1000 },
+    { role: language === 'ar' ? 'نادل' : 'Waiter', branch: language === 'ar' ? 'مدينة الكويت' : 'Kuwait City', totalTipsFils: 2000 },
+  ];
+  return rows.map((row, index) => ({ id: `company-preview-worker-${index + 1}`, name: demoWorkerName(index + 1, language), ...row }));
+}
+function CompanyWorkerPreviewTable({ workers }: { workers: ReturnType<typeof companyDemoWorkers> }) {
+  return <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th></tr></thead><tbody>{workers.map(worker=><tr key={worker.id}><td><div className="table-person"><Avatar name={worker.name} size="sm"/><span><b>{worker.name}</b><small>Sample worker</small></span></div></td><td><div><b>{worker.role}</b><small>{worker.branch}</small></div></td><td className="table-amount">{money(worker.totalTipsFils)}</td><td><Badge status="demo"/></td></tr>)}</tbody></table></div>;
+}
+function WorkerDemoPreview({ language, workerName }: { language: Language; workerName: string }) {
+  return <>
+    <DemoPreviewNotice language={language} testId="status-worker-demo-preview"/>
+    <div className="metric-grid" data-testid="worker-demo-preview-metrics">
+      <Metric label="Tips received" value={money(9250)} caption="All time" icon={Wallet} accent/>
+      <Metric label="This month" value={money(3750)} caption="Since the 1st" icon={ArrowUpRight}/>
+      <Metric label="Awaiting payout" value={money(7250)} caption="Not yet in payroll" icon={Clock3}/>
+      <Metric label="Average rating" value="4.6 / 5" caption={language === 'ar' ? 'من ١٠ تقييمات' : 'From 10 ratings'} icon={Star}/>
+    </div>
+    <section className="surface data-section">
+      <div className="section-heading">
+        <h3>{language === 'ar' ? 'أحدث الإكراميات' : 'Latest tips'}</h3>
+        <DemoFlag demo/>
+      </div>
+      <TransactionTable transactions={makeWorkerDemoTransactions('worker-preview', workerName)}/>
+    </section>
+  </>;
+}
 function WorkerOverview() {
   const q = useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
   const d=q.data;
   const { language } = useLanguage();
+  const showDemoPreview = isEmptyWorkerDashboard(d);
   const ratingCaption = !d || d.ratingCount === 0
     ? (language === 'ar' ? 'لا توجد تقييمات بعد' : 'No ratings yet')
     : language === 'ar'
       ? d.ratingCount === 1 ? 'من تقييم واحد' : d.ratingCount === 2 ? 'من تقييمين' : `من ${d.ratingCount} تقييمات`
       : `From ${d.ratingCount} ${d.ratingCount === 1 ? 'rating' : 'ratings'}`;
-  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&<><div className="metric-grid"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/><Metric label="Average rating" value={d.averageRating==null?'—':`${d.averageRating.toFixed(1)} / 5`} caption={ratingCaption} icon={Star}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>}</QueryState></PortalLayout>;
+  return <PortalLayout title="Overview"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{d&&(showDemoPreview?<WorkerDemoPreview language={language} workerName={d.worker.name}/>:<><div className="metric-grid"><Metric label="Tips received" value={money(d.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Awaiting payout" value={money(d.pendingTipsFils)} caption="Not yet in payroll" icon={Clock3}/><Metric label="Average rating" value={d.averageRating==null?'—':`${d.averageRating.toFixed(1)} / 5`} caption={ratingCaption} icon={Star}/></div><section className="surface data-section"><div className="section-heading"><div><h3>Latest tips</h3></div><div className="section-tools"><DemoFlag demo={d.isDemo}/><Link href="/worker/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div></div><TransactionTable transactions={d.recentTransactions}/></section></>)}</QueryState></PortalLayout>;
 }
 function WorkerTransactions() {
+  const { language }=useLanguage();
   const q=useListWorkerTransactions({query:{queryKey:getListWorkerTransactionsQueryKey()}});
-  return <PortalLayout title="Transactions"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}><section className="surface data-section"><div className="section-heading"><div><h3>Tip history <span className="subtle-count">{q.data?.length ?? 0}</span></h3></div><div className="section-tools"><DemoFlag demo={q.data?.some(x=>x.isDemo)}/><button onClick={()=>downloadCsv(q.data||[],'sanad-worker-transactions.csv')} className="outline-button"><Download size={15}/> Export</button></div></div><TransactionTable transactions={q.data}/></section></QueryState></PortalLayout>;
+  const dashboard=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
+  const showDemoPreview=isEmptyWorkerDashboard(dashboard.data)&&(q.data?.length??0)===0;
+  const transactions=showDemoPreview&&dashboard.data?makeWorkerDemoTransactions(dashboard.data.worker.id,dashboard.data.worker.name):q.data;
+  return <PortalLayout title="Transactions"><QueryState loading={q.isLoading||dashboard.isLoading} error={q.isError||dashboard.isError} retry={()=>{void q.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/>}<section className="surface data-section"><div className="section-heading"><div><h3>Tip history <span className="subtle-count">{transactions?.length ?? 0}</span></h3></div><div className="section-tools"><DemoFlag demo={showDemoPreview||q.data?.some(x=>x.isDemo)}/>{!showDemoPreview&&<button onClick={()=>downloadCsv(q.data||[],'sanad-worker-transactions.csv')} className="outline-button"><Download size={15}/> Export</button>}</div></div><TransactionTable transactions={transactions}/></section></QueryState></PortalLayout>;
 }
 function PayoutList({ payouts, empty, onStatusChange, updatingId }: { payouts?: PayoutRecord[]; empty: string; onStatusChange?: (payout: PayoutRecord) => void; updatingId?: string }) {
   const { language } = useLanguage();
@@ -897,12 +1049,22 @@ function PayoutList({ payouts, empty, onStatusChange, updatingId }: { payouts?: 
   return <LocalizedTree><div className="table-scroll"><table className="data-table"><thead><tr><th>Payroll period</th><th>Recorded</th><th>Amount</th><th>Status</th>{onStatusChange&&<th>Update record</th>}</tr></thead><tbody>{payouts.map((p)=><tr key={p.id}><td><div><b>{monthName(p.month,language)}</b><small>{p.note||'SANAD payout record'}{p.isDemo?' · Demo':''}</small></div></td><td>{dateLabel(p.recordedAt,language)}</td><td className="table-amount">{money(p.amountFils)}</td><td><Badge status={p.status}/></td>{onStatusChange&&<td><button className="outline-button compact" disabled={updatingId===p.id} onClick={()=>onStatusChange(p)}>{updatingId===p.id?'Saving…':p.status==='paid'?'Mark pending':'Mark paid'}</button></td>}</tr>)}</tbody></table></div></LocalizedTree>;
 }
 function WorkerEarnings() {
+  const { language }=useLanguage();
   const d=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
-  return <PortalLayout title="Earnings"><QueryState loading={d.isLoading} error={d.isError} retry={()=>void d.refetch()}>{d.data&&<><div className="metric-grid metric-grid-three"><Metric label="Total tips" value={money(d.data.totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(d.data.monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Paid out" value={money(d.data.paidTipsFils)} caption="Payroll recorded" icon={Banknote}/></div><section className="surface chart-surface earnings-chart"><TrendChart values={d.data.monthly}/></section></>}</QueryState></PortalLayout>;
+  const showDemoPreview=isEmptyWorkerDashboard(d.data);
+  const totalTipsFils=showDemoPreview?9250:d.data?.totalTipsFils??0;
+  const monthTipsFils=showDemoPreview?3750:d.data?.monthTipsFils??0;
+  const paidTipsFils=showDemoPreview?2000:d.data?.paidTipsFils??0;
+  const monthly=showDemoPreview?demoMonthlyValues():d.data?.monthly??[];
+  return <PortalLayout title="Earnings"><QueryState loading={d.isLoading} error={d.isError} retry={()=>void d.refetch()}>{d.data&&<>{showDemoPreview&&<DemoPreviewNotice language={language}/>}<div className="metric-grid metric-grid-three"><Metric label="Total tips" value={money(totalTipsFils)} caption="All time" icon={Wallet} accent/><Metric label="This month" value={money(monthTipsFils)} caption="Since the 1st" icon={ArrowUpRight}/><Metric label="Paid out" value={money(paidTipsFils)} caption="Payroll recorded" icon={Banknote}/></div><section className="surface chart-surface earnings-chart"><TrendChart values={monthly}/></section></>}</QueryState></PortalLayout>;
 }
 function WorkerPayouts() {
+  const { language }=useLanguage();
   const p=useListWorkerPayouts({query:{queryKey:getListWorkerPayoutsQueryKey()}});
-  return <PortalLayout title="Payouts"><QueryState loading={p.isLoading} error={p.isError} retry={()=>void p.refetch()}><section className="surface data-section"><div className="section-heading"><h3>Payroll records</h3><DemoFlag demo={p.data?.some(x=>x.isDemo)}/></div><p className="compact-note">Company-entered records · No bank transfer.</p><PayoutList payouts={p.data} empty="Your company’s payroll records will appear here."/></section></QueryState></PortalLayout>;
+  const dashboard=useGetWorkerDashboard({query:{queryKey:getGetWorkerDashboardQueryKey()}});
+  const showDemoPreview=isEmptyWorkerDashboard(dashboard.data)&&(p.data?.length??0)===0;
+  const payouts=showDemoPreview&&dashboard.data?makeDemoPayoutRecords([{id:dashboard.data.worker.id,name:dashboard.data.worker.name}],language):p.data;
+  return <PortalLayout title="Payouts"><QueryState loading={p.isLoading||dashboard.isLoading} error={p.isError||dashboard.isError} retry={()=>{void p.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/>}<section className="surface data-section"><div className="section-heading"><h3>Payroll records</h3><DemoFlag demo={showDemoPreview||p.data?.some(x=>x.isDemo)}/></div><p className="compact-note">Company-entered records · No bank transfer.</p><PayoutList payouts={payouts} empty="Your company’s payroll records will appear here."/></section></QueryState></PortalLayout>;
 }
 function WorkerQr() {
   const q=useGetWorkerBadge({query:{queryKey:getGetWorkerBadgeQueryKey()}});
@@ -966,27 +1128,14 @@ function demoWorkerName(ordinal: number, language: Language) {
   return `موظف تجريبي ${arabicOrdinal}`;
 }
 function CompanyDemoPreview({ language }: { language: Language }) {
-  const now = Date.now();
-  const sampleTips: TipTransaction[] = [
-    { id: 'company-preview-tip-1', workerId: 'company-preview-worker-1', workerName: demoWorkerName(1, language), amountFils: 500, currency: 'KWD', status: 'demo', rating: 4, createdAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(), isDemo: true },
-    { id: 'company-preview-tip-2', workerId: 'company-preview-worker-2', workerName: demoWorkerName(2, language), amountFils: 1000, currency: 'KWD', status: 'demo', rating: 5, createdAt: new Date(now - 7 * 60 * 60 * 1000).toISOString(), isDemo: true },
-    { id: 'company-preview-tip-3', workerId: 'company-preview-worker-3', workerName: demoWorkerName(3, language), amountFils: 750, currency: 'KWD', status: 'demo', rating: 4, createdAt: new Date(now - 26 * 60 * 60 * 1000).toISOString(), isDemo: true },
-    { id: 'company-preview-tip-4', workerId: 'company-preview-worker-4', workerName: demoWorkerName(4, language), amountFils: 500, currency: 'KWD', status: 'demo', rating: 5, createdAt: new Date(now - 2 * 86400000).toISOString(), isDemo: true },
-    { id: 'company-preview-tip-5', workerId: 'company-preview-worker-5', workerName: demoWorkerName(5, language), amountFils: 250, currency: 'KWD', status: 'demo', rating: 4, createdAt: new Date(now - 3 * 86400000).toISOString(), isDemo: true },
-    { id: 'company-preview-tip-6', workerId: 'company-preview-worker-6', workerName: demoWorkerName(6, language), amountFils: 1000, currency: 'KWD', status: 'demo', rating: 5, createdAt: new Date(now - 4 * 86400000).toISOString(), isDemo: true },
-  ];
+  const sampleTips = makeCompanyDemoTransactions(language);
   const samplePayouts = [
     { id: 'company-preview-payout-1', worker: 1, amountFils: 2000, status: 'paid' },
     { id: 'company-preview-payout-2', worker: 2, amountFils: 1000, status: 'pending' },
   ];
 
   return <>
-    <div className="demo-callout company-demo-preview-note" role="status" data-testid="status-company-demo-preview">
-      <Sparkles size={15} aria-hidden="true"/>
-      <span>{language === 'ar'
-        ? 'عرض تجريبي فقط. هذه الأمثلة للموظفين والإكراميات وسجلات الرواتب غير محفوظة ولا تمثل مدفوعات حقيقية. تعرض الصفحات الأخرى سجلاتك الفعلية.'
-        : 'Demo preview only. These sample workers, tips, and payroll records are not saved and do not represent real payments. Other pages show your actual records.'}</span>
-    </div>
+    <DemoPreviewNotice language={language} testId="status-company-demo-preview"/>
     <div className="metric-grid metric-grid-three" data-testid="company-demo-preview-metrics">
       <Metric label="Tips received" value={money(9250)} caption="Across your team" icon={Wallet} accent/>
       <Metric label="This month" value={money(3750)} caption="All team tips" icon={ArrowUpRight}/>
@@ -1024,29 +1173,25 @@ function CompanyOverview() {
   const notConfigured=q.isError&&isHttp404(q.error);
   const { language } = useLanguage();
   const dashboard = q.data;
-  const showDemoPreview = Boolean(
-    dashboard &&
-    dashboard.activeWorkers === 0 &&
-    dashboard.totalTipsFils === 0 &&
-    dashboard.monthTipsFils === 0 &&
-    dashboard.pendingTipsFils === 0 &&
-    dashboard.paidOutFils === 0 &&
-    dashboard.recentTransactions.length === 0,
-  );
+  const showDemoPreview = isEmptyCompanyDashboard(dashboard);
   return <PortalLayout company title={notConfigured?'Set up your company':'Overview'}><QueryState loading={q.isLoading} error={q.isError&&!notConfigured} retry={()=>void q.refetch()}>{notConfigured?<CompanyOnboarding/>:dashboard&&<><div className="overview-actions company-overview-actions"><DemoFlag demo={dashboard.isDemo||showDemoPreview}/><Link href="/company/workers" className="solid-button" data-testid="link-manage-workers"><Users size={15}/> Manage Workers</Link></div>{showDemoPreview?<CompanyDemoPreview language={language}/>:<><div className="metric-grid metric-grid-three"><Metric label="Tips received" value={money(dashboard.totalTipsFils)} caption="Across your team" icon={Wallet} accent/><Metric label="This month" value={money(dashboard.monthTipsFils)} caption="All team tips" icon={ArrowUpRight}/><Metric label="Pending payroll" value={money(dashboard.pendingTipsFils)} caption="Ready to record" icon={Clock3}/></div><section className="surface data-section"><div className="section-heading"><h3>Recent tips</h3><Link href="/company/transactions" className="text-link">All transactions <ArrowUpRight size={14}/></Link></div><TransactionTable transactions={dashboard.recentTransactions}/></section></>}</>}</QueryState></PortalLayout>;
 }
 function CompanyQrBadges() {
   const q=useListCompanyWorkers({query:{queryKey:getListCompanyWorkersQueryKey()}});
+  const dashboard=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
   const { language }=useLanguage();
   const [copied,setCopied]=useState('');
   const badgeWorkers=(q.data||[]).filter(worker=>worker.status==='active');
+  const sampleWorkers=companyDemoWorkers(language);
+  const showDemoPreview=isEmptyCompanyDashboard(dashboard.data)&&(q.data?.length??0)===0;
   const tipUrl=(slug:string)=>baseAwareUrl(`${window.location.origin}${basePath}/tip/${encodeURIComponent(slug)}`);
   const copy=async(workerId:string,url:string)=>{try{await navigator.clipboard.writeText(url);setCopied(workerId);window.setTimeout(()=>setCopied(''),1600)}catch{setCopied('')}};
-  return <PortalLayout company title="QR Badges"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{badgeWorkers.length?<section className="surface company-badge-list" aria-label="Worker QR badges"><div className="section-heading company-badge-heading"><h3>Worker badges <span className="subtle-count">{badgeWorkers.length}</span></h3><DemoFlag demo={badgeWorkers.some(worker=>worker.isDemo)}/></div>{badgeWorkers.map(worker=>{const url=tipUrl(worker.slug);return <article className="company-badge-row" key={worker.id} data-testid={`card-worker-qr-${worker.id}`}><QRCodeSVG value={url} size={72} level="M" includeMargin fgColor="#3B1720" bgColor="#FAF4EC" title={`SANAD tip QR for ${worker.name}`}/><div className="company-badge-person"><strong>{worker.name}</strong><span>{worker.role}{worker.branch?` · ${worker.branch}`:''}</span><code dir="ltr">{url}</code></div><div className="company-badge-actions"><button className="outline-button compact" type="button" onClick={()=>void copy(worker.id,url)} data-testid={`button-copy-worker-tip-${worker.id}`}>{copied===worker.id?<Check size={13}/>:<Copy size={13}/>} {copied===worker.id?(language==='ar'?'تم النسخ':'Copied'):(language==='ar'?'نسخ الرابط':'Copy link')}</button><a className="outline-button compact" href={url} target="_blank" rel="noreferrer" data-testid={`link-open-worker-tip-${worker.id}`}>{language==='ar'?'فتح الرابط':'Open tip page'} <ArrowUpRight size={13}/></a></div></article>})}</section>:<EmptyPanel title="No active worker badges" text="Activate a worker to show their QR code."/>}</QueryState></PortalLayout>;
+  return <PortalLayout company title="QR Badges"><QueryState loading={q.isLoading||dashboard.isLoading} error={q.isError||dashboard.isError} retry={()=>{void q.refetch();void dashboard.refetch()}}>{showDemoPreview?<><DemoPreviewNotice language={language}/><section className="surface company-badge-list" aria-label="Sample worker QR badges"><div className="section-heading company-badge-heading"><h3>Sample worker badges <span className="subtle-count">{sampleWorkers.length}</span></h3><DemoFlag demo/></div>{sampleWorkers.map(worker=><article className="company-badge-row" key={worker.id} data-testid={`card-worker-qr-${worker.id}`}><QRCodeSVG value={`SANAD-DEMO-PREVIEW-${worker.id}`} size={72} level="M" includeMargin fgColor="#3B1720" bgColor="#FAF4EC" title={`Non-functional sample QR for ${worker.name}`}/><div className="company-badge-person"><strong>{worker.name}</strong><span>{worker.role} · {worker.branch}</span><code dir="ltr">{language==='ar'?'رمز تجريبي غير فعّال':'Preview only · no live tip link'}</code></div></article>)}</section></>:badgeWorkers.length?<section className="surface company-badge-list" aria-label="Worker QR badges"><div className="section-heading company-badge-heading"><h3>Worker badges <span className="subtle-count">{badgeWorkers.length}</span></h3><DemoFlag demo={badgeWorkers.some(worker=>worker.isDemo)}/></div>{badgeWorkers.map(worker=>{const url=tipUrl(worker.slug);return <article className="company-badge-row" key={worker.id} data-testid={`card-worker-qr-${worker.id}`}><QRCodeSVG value={url} size={72} level="M" includeMargin fgColor="#3B1720" bgColor="#FAF4EC" title={`SANAD tip QR for ${worker.name}`}/><div className="company-badge-person"><strong>{worker.name}</strong><span>{worker.role}{worker.branch?` · ${worker.branch}`:''}</span><code dir="ltr">{url}</code></div><div className="company-badge-actions"><button className="outline-button compact" type="button" onClick={()=>void copy(worker.id,url)} data-testid={`button-copy-worker-tip-${worker.id}`}>{copied===worker.id?<Check size={13}/>:<Copy size={13}/>} {copied===worker.id?(language==='ar'?'تم النسخ':'Copied'):(language==='ar'?'نسخ الرابط':'Copy link')}</button><a className="outline-button compact" href={url} target="_blank" rel="noreferrer" data-testid={`link-open-worker-tip-${worker.id}`}>{language==='ar'?'فتح الرابط':'Open tip page'} <ArrowUpRight size={13}/></a></div></article>})}</section>:<EmptyPanel title="No active worker badges" text="Activate a worker to show their QR code."/>}</QueryState></PortalLayout>;
 }
 function CompanyWorkers() {
   const { language }=useLanguage();
   const q=useListCompanyWorkers({query:{queryKey:getListCompanyWorkersQueryKey()}});
+  const dashboard=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
   const create=useCreateCompanyWorker();
   const update=useUpdateCompanyWorker();
   const resetPassword=useIssueWorkerTemporaryPassword();
@@ -1061,31 +1206,46 @@ function CompanyWorkers() {
   const reset=(worker:{id:string;name:string})=>{const prompt=language==='ar'?`إصدار كلمة مرور مؤقتة جديدة لـ ${worker.name}؟ سيؤدي ذلك إلى إنهاء الجلسات الحالية.`:`Issue a new temporary password for ${worker.name}? This will end their current sessions.`;if(!window.confirm(prompt))return;resetPassword.mutate({workerId:worker.id},{onSuccess:(result)=>{setCredentialWorker(worker.name);setTemporaryPassword(result.temporaryPassword);setOpen(true)}})};
   const copyPassword=async()=>{try{await navigator.clipboard.writeText(temporaryPassword);setPasswordCopied(true);window.setTimeout(()=>setPasswordCopied(false),1800)}catch{setPasswordCopied(false)}};
   const visible=(q.data||[]).filter(w=>`${w.name} ${w.phoneNumber||''} ${w.role} ${w.branch||''}`.toLowerCase().includes(filter.toLowerCase()));
-  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{resetPassword.isError&&<div className="form-notice" role="alert">Couldn’t issue a new temporary password. Try again.</div>}<section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{visible.length}</span></h3></div><div className="section-tools"><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>{setTemporaryPassword('');setCredentialWorker('');setOpen(true)}}><Users size={15}/> Add worker</button></div></div>{visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><WorkerPhotoEditor workerId={w.id} name={w.name} photoUrl={w.photoUrl} companyManaged compact onSaved={()=>void refresh()}/><span><b>{w.name}</b><small dir="ltr">{w.phoneNumber||'No phone number'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><div className="worker-row-actions">{w.status==='active'&&<button className="outline-button compact" disabled={resetPassword.isPending} onClick={()=>reset({id:w.id,name:w.name})}>Reset password</button>}<button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></div></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><div className="modal-card"><button type="button" className="modal-close" onClick={closeModal} aria-label="Close"><X size={17}/></button>{temporaryPassword?<><div className="eyebrow">WORKER LOGIN</div><h2>{language==='ar'?`بيانات دخول ${credentialWorker}`:`Share with ${credentialWorker}`}</h2><p>Give this temporary password to the worker directly. It is shown only once.</p><div className="temporary-password" dir="ltr"><code>{temporaryPassword}</code><button type="button" className="outline-button compact" onClick={()=>void copyPassword()}>{passwordCopied?<Check size={14}/>:<Copy size={14}/>} {passwordCopied?'Copied':'Copy'}</button></div><div className="notice-box"><KeyRound size={16}/><span>The worker signs in with their phone number and changes this password at first sign-in.</span></div><PillButton type="button" onClick={closeModal}>Done <Check size={15}/></PillButton></>:<form onSubmit={submit}><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Phone number<input required type="tel" autoComplete="tel" dir="ltr" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice" role="alert">Couldn’t add this worker. Check the phone number and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form>}</div></div>}</PortalLayout>;
+  const sampleWorkers=companyDemoWorkers(language);
+  const showDemoPreview=isEmptyCompanyDashboard(dashboard.data)&&(q.data?.length??0)===0;
+  const demoVisible=sampleWorkers.filter(w=>`${w.name} ${w.role} ${w.branch}`.toLowerCase().includes(filter.toLowerCase()));
+  return <PortalLayout company title="Workers"><QueryState loading={q.isLoading||dashboard.isLoading} error={q.isError||dashboard.isError} retry={()=>{void q.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/ >}{resetPassword.isError&&<div className="form-notice" role="alert">Couldn’t issue a new temporary password. Try again.</div>}<section className="surface data-section"><div className="section-heading"><div><h3>Team <span className="subtle-count">{showDemoPreview?demoVisible.length:visible.length}</span></h3></div><div className="section-tools"><DemoFlag demo={showDemoPreview||q.data?.some(w=>w.isDemo)}/><div className="searchbox"><Search size={15}/><input data-testid="input-worker-search" placeholder="Search workers" value={filter} onChange={e=>setFilter(e.target.value)}/></div><button className="solid-button" onClick={()=>{setTemporaryPassword('');setCredentialWorker('');setOpen(true)}}><Users size={15}/> Add worker</button></div></div>{showDemoPreview ? <CompanyWorkerPreviewTable workers={demoVisible}/> : visible.length? <div className="table-scroll"><table className="data-table"><thead><tr><th>Worker</th><th>Role & branch</th><th>Tips received</th><th>Status</th><th>Action</th></tr></thead><tbody>{visible.map((w)=><tr key={w.id}><td><div className="table-person"><WorkerPhotoEditor workerId={w.id} name={w.name} photoUrl={w.photoUrl} companyManaged compact onSaved={()=>void refresh()}/><span><b>{w.name}</b><small dir="ltr">{w.phoneNumber||'No phone number'}</small></span></div></td><td><div><b>{w.role}</b><small>{w.branch||'No branch'}</small></div></td><td className="table-amount">{money(w.totalTipsFils)}</td><td><Badge status={w.status}/></td><td><div className="worker-row-actions">{w.status==='active'&&<button className="outline-button compact" disabled={resetPassword.isPending} onClick={()=>reset({id:w.id,name:w.name})}>Reset password</button>}<button className="outline-button compact" disabled={update.isPending} onClick={()=>update.mutate({workerId:w.id,data:{status:w.status==='active'?'inactive':'active'}},{onSuccess:()=>void refresh()})}>{w.status==='active'?'Pause':'Activate'}</button></div></td></tr>)}</tbody></table></div>:<EmptyPanel title="No team members found" text="Try another name or add your first worker."/>}</section></QueryState>{open&&<div className="modal-backdrop" role="presentation"><div className="modal-card"><button type="button" className="modal-close" onClick={closeModal} aria-label="Close"><X size={17}/></button>{temporaryPassword?<><div className="eyebrow">WORKER LOGIN</div><h2>{language==='ar'?`بيانات دخول ${credentialWorker}`:`Share with ${credentialWorker}`}</h2><p>Give this temporary password to the worker directly. It is shown only once.</p><div className="temporary-password" dir="ltr"><code>{temporaryPassword}</code><button type="button" className="outline-button compact" onClick={()=>void copyPassword()}>{passwordCopied?<Check size={14}/>:<Copy size={14}/>} {passwordCopied?'Copied':'Copy'}</button></div><div className="notice-box"><KeyRound size={16}/><span>The worker signs in with their phone number and changes this password at first sign-in.</span></div><PillButton type="button" onClick={closeModal}>Done <Check size={15}/></PillButton></>:<form onSubmit={submit}><div className="eyebrow">ADD WORKER</div><h2>Add worker</h2><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Faisal Al-Rashid"/></label><label>Arabic name <input dir="rtl" value={arabic} onChange={e=>setArabic(e.target.value)} placeholder="الاسم بالعربية"/></label><label>Phone number<input required type="tel" autoComplete="tel" dir="ltr" value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)} placeholder="+965 5000 0000"/></label><div className="modal-split"><label>Role<input required value={role} onChange={e=>setRole(e.target.value)} placeholder="Barista"/></label><label>Branch<input value={branch} onChange={e=>setBranch(e.target.value)} placeholder="Salmiya"/></label></div>{create.isError&&<div className="form-notice" role="alert">Couldn’t add this worker. Check the phone number and try again.</div>}<PillButton type="submit" disabled={create.isPending}>{create.isPending?'Adding…':'Add worker'} <ArrowUpRight size={15}/></PillButton></form>}</div></div>}</PortalLayout>;
 }
 function CompanyTransactions() {
   const q=useListCompanyTransactions({query:{queryKey:getListCompanyTransactionsQueryKey()}});
+  const dashboard=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
+  const { language }=useLanguage();
   const [search,setSearch]=useState('');
-  const data=(q.data||[]).filter(t=>t.workerName.toLowerCase().includes(search.toLowerCase()));
-  return <PortalLayout company title="Transactions"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}><section className="surface data-section"><div className="section-heading"><h3>Tip history <span className="subtle-count">{data.length}</span></h3><div className="section-tools"><DemoFlag demo={q.data?.some(t=>t.isDemo)}/><div className="searchbox"><Search size={15}/><input placeholder="Search workers" value={search} onChange={e=>setSearch(e.target.value)}/></div><button onClick={()=>downloadCsv(data,'sanad-company-transactions.csv')} className="outline-button"><Download size={15}/> Export</button></div></div><TransactionTable transactions={data}/></section></QueryState></PortalLayout>;
+  const showDemoPreview=isEmptyCompanyDashboard(dashboard.data)&&(q.data?.length??0)===0;
+  const allTransactions=showDemoPreview?makeCompanyDemoTransactions(language):q.data||[];
+  const data=allTransactions.filter(t=>t.workerName.toLowerCase().includes(search.toLowerCase()));
+  return <PortalLayout company title="Transactions"><QueryState loading={q.isLoading||dashboard.isLoading} error={q.isError||dashboard.isError} retry={()=>{void q.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/>}<section className="surface data-section"><div className="section-heading"><h3>Tip history <span className="subtle-count">{data.length}</span></h3><div className="section-tools"><DemoFlag demo={showDemoPreview||q.data?.some(t=>t.isDemo)}/><div className="searchbox"><Search size={15}/><input placeholder="Search workers" value={search} onChange={e=>setSearch(e.target.value)}/></div>{!showDemoPreview&&<button onClick={()=>downloadCsv(data,'sanad-company-transactions.csv')} className="outline-button"><Download size={15}/> Export</button>}</div></div><TransactionTable transactions={data}/></section></QueryState></PortalLayout>;
 }
 function CompanyPayouts() {
   const q=useListCompanyPayouts({query:{queryKey:getListCompanyPayoutsQueryKey()}});
   const workers=useListCompanyWorkers({query:{queryKey:getListCompanyWorkersQueryKey()}});
+  const dashboard=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
+  const { language }=useLanguage();
   const create=useCreateCompanyPayout();
   const updateStatus=useUpdateCompanyPayoutStatus();
   const qc=useQueryClient();
   const [open,setOpen]=useState(false);const [workerId,setWorkerId]=useState('');const [amount,setAmount]=useState('');const [month,setMonth]=useState(kuwaitMonth);const [note,setNote]=useState('');
   const submit=(e:FormEvent)=>{e.preventDefault();create.mutate({data:{workerId,amountFils:Math.round(Number(amount)*1000),month,note:note||null}},{onSuccess:()=>{void qc.invalidateQueries({queryKey:getListCompanyPayoutsQueryKey()});void qc.invalidateQueries({queryKey:getGetCompanyDashboardQueryKey()});setOpen(false)}})};
   const changeStatus=(payout:PayoutRecord)=>updateStatus.mutate({payoutId:payout.id,data:{status:payout.status==='paid'?'pending':'paid'}},{onSuccess:()=>{void qc.invalidateQueries({queryKey:getListCompanyPayoutsQueryKey()});void qc.invalidateQueries({queryKey:getGetCompanyDashboardQueryKey()})}});
-  return <PortalLayout company title="Payouts"><QueryState loading={q.isLoading||workers.isLoading} error={q.isError||workers.isError} retry={()=>{void q.refetch();void workers.refetch()}}><div className="payout-toolbar"><span className="compact-note"><ShieldCheck size={15}/> Payroll records only · SANAD does not send bank transfers.</span><button className="solid-button" onClick={()=>setOpen(true)}><Banknote size={15}/> Record payout</button></div>{updateStatus.isError&&<div className="form-notice" role="alert">Could not update this payroll record. Please try again.</div>}<section className="surface data-section"><div className="section-heading"><h3>Payout history <span className="subtle-count">{q.data?.length??0}</span></h3><DemoFlag demo={q.data?.some(x=>x.isDemo)}/></div><PayoutList payouts={q.data} empty="Recorded payouts will appear here." onStatusChange={changeStatus} updatingId={updateStatus.isPending ? updateStatus.variables?.payoutId : undefined}/></section></QueryState>{open&&<div className="modal-backdrop"><form className="modal-card" onSubmit={submit}><button type="button" className="modal-close" onClick={()=>setOpen(false)} aria-label="Close"><X size={17}/></button><div className="eyebrow">PAYROLL RECORD</div><h2>Record a payout</h2><p>Record a payroll payment already handled by your company.</p><label>Worker<select required value={workerId} onChange={e=>setWorkerId(e.target.value)}><option value="">Select a worker</option>{workers.data?.map(w=><option value={w.id} key={w.id}>{w.name}</option>)}</select></label><div className="modal-split"><label>Amount in KWD<input required type="number" min="0.001" step="0.001" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.000"/></label><label>Payroll month<input required type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label></div><label>Note (optional)<textarea maxLength={500} rows={3} value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional reference for this payroll record"/></label>{create.isError&&<div className="form-notice">Could not save payout. Please try again.</div>}<PillButton type="submit" disabled={create.isPending||!workerId}>{create.isPending?'Saving…':'Save payout record'} <ArrowUpRight size={15}/></PillButton></form></div>}</PortalLayout>;
+  const showDemoPreview=isEmptyCompanyDashboard(dashboard.data)&&(q.data?.length??0)===0&&(workers.data?.length??0)===0;
+  const sampleWorkers=companyDemoWorkers(language);
+  const payouts=showDemoPreview?makeDemoPayoutRecords(sampleWorkers.map(w=>({id:w.id,name:w.name})),language):q.data;
+  return <PortalLayout company title="Payouts"><QueryState loading={q.isLoading||workers.isLoading||dashboard.isLoading} error={q.isError||workers.isError||dashboard.isError} retry={()=>{void q.refetch();void workers.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/>}<div className="payout-toolbar"><span className="compact-note"><ShieldCheck size={15}/> Payroll records only · SANAD does not send bank transfers.</span>{!showDemoPreview&&<button className="solid-button" onClick={()=>setOpen(true)}><Banknote size={15}/> Record payout</button>}</div>{!showDemoPreview&&updateStatus.isError&&<div className="form-notice" role="alert">Could not update this payroll record. Please try again.</div>}<section className="surface data-section"><div className="section-heading"><h3>Payout history <span className="subtle-count">{payouts?.length??0}</span></h3><DemoFlag demo={showDemoPreview||q.data?.some(x=>x.isDemo)}/></div><PayoutList payouts={payouts} empty="Recorded payouts will appear here." onStatusChange={showDemoPreview?undefined:changeStatus} updatingId={updateStatus.isPending ? updateStatus.variables?.payoutId : undefined}/></section></QueryState>{open&&!showDemoPreview&&<div className="modal-backdrop"><form className="modal-card" onSubmit={submit}><button type="button" className="modal-close" onClick={()=>setOpen(false)} aria-label="Close"><X size={17}/></button><div className="eyebrow">PAYROLL RECORD</div><h2>Record a payout</h2><p>Record a payroll payment already handled by your company.</p><label>Worker<select required value={workerId} onChange={e=>setWorkerId(e.target.value)}><option value="">Select a worker</option>{workers.data?.map(w=><option value={w.id} key={w.id}>{w.name}</option>)}</select></label><div className="modal-split"><label>Amount in KWD<input required type="number" min="0.001" step="0.001" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.000"/></label><label>Payroll month<input required type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label></div><label>Note (optional)<textarea maxLength={500} rows={3} value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional reference for this payroll record"/></label>{create.isError&&<div className="form-notice">Could not save payout. Please try again.</div>}<PillButton type="submit" disabled={create.isPending||!workerId}>{create.isPending?'Saving…':'Save payout record'} <ArrowUpRight size={15}/></PillButton></form></div>}</PortalLayout>;
 }
 function CompanyReports() {
   const { language } = useLanguage();
   const monthState=useState(kuwaitMonth);
   const [month,setMonth]=monthState;
   const q=useGetCompanyReport({month},{query:{queryKey:getGetCompanyReportQueryKey({month}),enabled:!!month}});
-  return <PortalLayout company title="Reports"><QueryState loading={q.isLoading} error={q.isError} retry={()=>void q.refetch()}>{q.data&&<section className="surface report-panel"><div className="report-title"><div className="report-icon"><FileText/></div><div><span className="panel-kicker">MONTHLY REPORT</span><h3>{monthName(q.data.month,language)}</h3></div><label className="month-picker"><span>Month</span><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><DemoFlag demo={q.data.isDemo}/></div><div className="report-rows"><div><span>Total tips</span><strong>{money(q.data.tipsFils)}</strong></div><div><span>Pending payroll</span><strong>{money(q.data.pendingFils)}</strong></div><div><span>Paid out</span><strong>{money(q.data.paidOutFils)}</strong></div><div><span>Workers</span><strong>{q.data.workerCount}</strong></div><div><span>Transactions</span><strong>{q.data.transactionCount}</strong></div></div><button className="outline-button" onClick={()=>downloadCsv([{month:monthName(q.data!.month),tips:money(q.data!.tipsFils),pending:money(q.data!.pendingFils),paidOut:money(q.data!.paidOutFils),workers:q.data!.workerCount,transactions:q.data!.transactionCount}],'sanad-monthly-report.csv')}><Download size={15}/> Download report</button></section>}</QueryState></PortalLayout>;
+  const dashboard=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey()}});
+  const showDemoPreview=isEmptyCompanyDashboard(dashboard.data)&&Boolean(q.data&&q.data.tipsFils===0&&q.data.pendingFils===0&&q.data.paidOutFils===0&&q.data.workerCount===0&&q.data.transactionCount===0);
+  const report=showDemoPreview?demoCompanyReport(month):q.data;
+  return <PortalLayout company title="Reports"><QueryState loading={q.isLoading||dashboard.isLoading} error={q.isError||dashboard.isError} retry={()=>{void q.refetch();void dashboard.refetch()}}>{showDemoPreview&&<DemoPreviewNotice language={language}/ >}{report&&<section className="surface report-panel"><div className="report-title"><div className="report-icon"><FileText/></div><div><span className="panel-kicker">MONTHLY REPORT</span><h3>{monthName(report.month,language)}</h3></div><label className="month-picker"><span>Month</span><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><DemoFlag demo={showDemoPreview||report.isDemo}/></div><div className="report-rows"><div><span>Total tips</span><strong>{money(report.tipsFils)}</strong></div><div><span>Pending payroll</span><strong>{money(report.pendingFils)}</strong></div><div><span>Paid out</span><strong>{money(report.paidOutFils)}</strong></div><div><span>Workers</span><strong>{report.workerCount}</strong></div><div><span>Transactions</span><strong>{report.transactionCount}</strong></div></div>{!showDemoPreview&&<button className="outline-button" onClick={()=>downloadCsv([{month:monthName(report.month),tips:money(report.tipsFils),pending:money(report.pendingFils),paidOut:money(report.paidOutFils),workers:report.workerCount,transactions:report.transactionCount}],'sanad-monthly-report.csv')}><Download size={15}/> Download report</button>}</section>}</QueryState></PortalLayout>;
 }
 function CompanySettings() {
   const { signOut }=useClerk();
