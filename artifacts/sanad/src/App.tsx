@@ -871,7 +871,13 @@ function PortalLayout({ children, company = false, title = 'Overview' }: { child
     </aside>
     {mobileNav && <button aria-label="Close navigation" className="nav-backdrop" onClick={()=>setMobileNav(false)}/>}
     <div className="portal-main"><header className="portal-header"><button className="mobile-menu" onClick={()=>setMobileNav(true)} aria-label="Open menu" aria-expanded={mobileNav} aria-controls="portal-navigation"><Menu/></button><div><span className="breadcrumb">SANAD <ChevronRight size={12}/> {company?'COMPANY':'WORKER'}</span><h1>{localized(title,language)}</h1></div><div className="portal-header-tools"><LanguageToggle/><div className="top-user">{initials(accountName)}</div></div></header>
-      <main className="portal-content">{children}</main>
+      <main className="portal-content">
+        {children}
+        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/workers' && <CompanyDemoExamples section="workers"/>}
+        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/transactions' && <CompanyDemoExamples section="transactions"/>}
+        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/payouts' && <CompanyDemoExamples section="payouts"/>}
+        {company && companyAccount.data && !isEmptyCompanyDashboard(companyAccount.data) && currentPath === '/company/reports' && <CompanyDemoExamples section="reports"/>}
+      </main>
     </div>
   </div></LocalizedTree>;
 }
@@ -1127,6 +1133,7 @@ function demoWorkerName(ordinal: number, language: Language) {
   const arabicOrdinal = String(ordinal).replace(/\d/g, (digit) => arabicDigits[Number(digit)] ?? digit);
   return `موظف تجريبي ${arabicOrdinal}`;
 }
+
 function CompanyDemoPreview({ language }: { language: Language }) {
   const sampleTips = makeCompanyDemoTransactions(language);
   const samplePayouts = [
@@ -1167,6 +1174,70 @@ function CompanyDemoPreview({ language }: { language: Language }) {
       </div>
     </section>
   </>;
+}
+
+function CompanyDemoExamples({ section }: { section: 'workers' | 'transactions' | 'payouts' | 'reports' }) {
+  const { language } = useLanguage();
+  const ar = language === 'ar';
+  const sampleTips = makeCompanyDemoTransactions(language);
+  const sampleWorkers = companyDemoWorkers(language);
+  const samplePayouts = makeDemoPayoutRecords(sampleWorkers.map(worker => ({ id: worker.id, name: worker.name })), language);
+  const sampleReport = demoCompanyReport(kuwaitMonth());
+  const title = section === 'workers'
+    ? (ar ? 'موظفون تجريبيون' : 'Sample workers')
+    : section === 'transactions'
+      ? (ar ? 'إكراميات تجريبية' : 'Sample tip transactions')
+      : section === 'payouts'
+        ? (ar ? 'سجلات رواتب تجريبية' : 'Sample payroll records')
+        : (ar ? 'تقرير شهري تجريبي' : 'Sample monthly report');
+  const note = ar
+    ? 'هذه أمثلة للعرض فقط. لا تُحفظ ولا تُضاف إلى سجلات شركتك.'
+    : 'Examples for preview only. They are not saved or added to your company records.';
+
+  if (section === 'workers') {
+    return <section className="surface data-section company-demo-section" data-testid="section-company-demo-workers">
+      <div className="section-heading"><div><h3>{title}</h3><p className="company-demo-caption">{note}</p></div><DemoFlag demo/></div>
+      <div className="company-demo-worker-grid">
+        {sampleWorkers.map((worker, index) => <article className="company-demo-worker-card" key={worker.id} data-testid={`card-demo-worker-${index + 1}`}>
+          <div className="company-demo-worker-heading"><span className="company-demo-worker-avatar">{`D${index + 1}`}</span><div><strong>{worker.name}</strong><small>{ar ? 'موظف تجريبي' : 'Sample worker'}</small></div></div>
+          <div className="company-demo-worker-details"><span>{worker.role}</span><span>{worker.branch}</span></div>
+          <div className="company-demo-worker-tips"><span>{ar ? 'إكراميات تجريبية' : 'Sample tips'}</span><strong>{money(worker.totalTipsFils)}</strong></div>
+        </article>)}
+      </div>
+    </section>;
+  }
+
+  if (section === 'transactions') {
+    return <section className="surface data-section company-demo-section" data-testid="section-company-demo-transactions">
+      <div className="section-heading"><div><h3>{title}</h3><p className="company-demo-caption">{note}</p></div><DemoFlag demo/></div>
+      <TransactionTable transactions={sampleTips}/>
+    </section>;
+  }
+
+  if (section === 'payouts') {
+    return <section className="surface data-section company-demo-section" data-testid="section-company-demo-payout-examples">
+      <div className="section-heading"><div><h3>{title}</h3><p className="company-demo-caption">{ar ? 'أمثلة فقط · لا يتم تسجيل دفعة أو تحويل أي مبلغ.' : 'Examples only · no payout is recorded or sent.'}</p></div><DemoFlag demo/></div>
+      <div className="company-demo-payout-list">
+        {samplePayouts.map(payout => <div className="company-demo-payout-row" key={payout.id} data-testid={`row-demo-payout-tab-${payout.id}`}>
+          <div className="company-demo-payout-person"><strong>{payout.workerName}</strong><small>{ar ? 'سجل تجريبي' : 'Sample record'}</small></div>
+          <strong className="company-demo-payout-amount">{money(payout.amountFils)}</strong>
+          <span className="company-demo-payout-status">{ar ? `مثال · ${payout.status === 'paid' ? 'مدفوع' : 'معلّق'}` : `SAMPLE · ${payout.status.toUpperCase()}`}</span>
+        </div>)}
+      </div>
+    </section>;
+  }
+
+  return <section className="surface report-panel company-demo-section" data-testid="section-company-demo-report">
+    <div className="report-title"><div className="report-icon"><FileText/></div><div><span className="panel-kicker">{ar ? 'تقرير توضيحي' : 'SAMPLE REPORT'}</span><h3>{monthName(sampleReport.month, language)} · {title}</h3></div><DemoFlag demo/></div>
+    <p className="company-demo-caption">{note}</p>
+    <div className="report-rows">
+      <div><span>{ar ? 'إجمالي الإكراميات' : 'Total tips'}</span><strong>{money(sampleReport.tipsFils)}</strong></div>
+      <div><span>{ar ? 'رواتب معلّقة' : 'Pending payroll'}</span><strong>{money(sampleReport.pendingFils)}</strong></div>
+      <div><span>{ar ? 'رواتب مدفوعة' : 'Paid out'}</span><strong>{money(sampleReport.paidOutFils)}</strong></div>
+      <div><span>{ar ? 'موظفون' : 'Workers'}</span><strong>{sampleReport.workerCount}</strong></div>
+      <div><span>{ar ? 'معاملات' : 'Transactions'}</span><strong>{sampleReport.transactionCount}</strong></div>
+    </div>
+  </section>;
 }
 function CompanyOverview() {
   const q=useGetCompanyDashboard({query:{queryKey:getGetCompanyDashboardQueryKey(),retry:false}});

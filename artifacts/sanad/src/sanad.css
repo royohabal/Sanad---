@@ -493,6 +493,20 @@ html[dir="rtl"] .side-link-button { text-align:right; }
 .company-demo-payout-person strong { color:#3B1720;font-size:10px; }
 .company-demo-payout-person small { margin-top:4px;color:#806E66;font-size:8px; }
 .company-demo-payout-amount { color:#3B1720;font-size:10px;font-weight:800;white-space:nowrap; }
+.company-demo-section { margin-top:17px; }
+.company-demo-caption { margin:6px 0 0;color:#806E66;font-size:9px;line-height:1.55; }
+.company-demo-worker-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
+.company-demo-worker-card { min-width:0;padding:13px;border:1px solid #E8DAC8;border-radius:13px;background:#FFF9F2; }
+.company-demo-worker-heading { display:flex;align-items:center;gap:9px;min-width:0; }
+.company-demo-worker-avatar { width:32px;height:32px;flex:none;display:grid;place-items:center;border-radius:50%;background:#F3DED1;color:#8A5046;font-size:8px;font-weight:800; }
+.company-demo-worker-heading>div { min-width:0; }
+.company-demo-worker-heading strong,.company-demo-worker-heading small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.company-demo-worker-heading strong { color:#3B1720;font-size:9px; }
+.company-demo-worker-heading small { margin-top:3px;color:#92796C;font-size:7px; }
+.company-demo-worker-details { display:flex;justify-content:space-between;gap:8px;margin-top:12px;color:#806E66;font-size:8px; }
+.company-demo-worker-tips { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:9px;border-top:1px solid #F0E4D7;color:#92796C;font-size:7px; }
+.company-demo-worker-tips strong { color:#3B1720;font-size:9px; }
+.company-demo-payout-status { color:#8C510F;background:#FFF3E0;border:1px solid #F2DEBF;border-radius:99px;padding:5px 8px;font-size:7px;font-weight:800;white-space:nowrap; }
 @media (max-width:480px) {
   .tip-page { padding:18px 12px 24px; }
   .tip-card { padding:24px 20px 22px; }
@@ -501,4 +515,9 @@ html[dir="rtl"] .side-link-button { text-align:right; }
 @media (max-width:767px) {
   .company-demo-payout-row { grid-template-columns:minmax(0,1fr) auto;gap:9px; }
   .company-demo-payout-row>.status { grid-column:2;justify-self:end; }
+  .company-demo-payout-status { grid-column:1 / -1;justify-self:start; }
+  .company-demo-worker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:480px) {
+  .company-demo-worker-grid { grid-template-columns:1fr; }
 }
